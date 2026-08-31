@@ -1,0 +1,23 @@
+<Project>
+
+  <!--
+    Central Package Management: every version in the solution is declared here, and csproj
+    files reference packages without a Version attribute. Added while the repo is still small,
+    since retrofitting it once a dozen projects each pin their own versions is a much duller job.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Analyzers">
+    <!--
+      1.1.118 is the newest stable, but it was released before C# 9 and misreports on
+      file-scoped namespaces, records and collection expressions - all of which this codebase
+      uses. 1.2.0-beta.556 is the build the ecosystem actually standardised on for modern C#.
+    -->
+    <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.33.0.1635" />
+  </ItemGroup>
+
+</Project>

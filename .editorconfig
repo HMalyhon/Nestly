@@ -1,0 +1,87 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{cs,csx}]
+indent_size = 4
+
+[*.{json,yml,yaml,js,jsx,ts,tsx,css,html,md}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false  # two trailing spaces is a hard line break
+
+[*.cs]
+
+#### .NET code style ####
+
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_qualification_for_event = false:warning
+
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_prefer_auto_properties = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_readonly_field = true:warning
+
+csharp_using_directive_placement = outside_namespace:warning
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_prefer_braces = true:warning
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_prefer_primary_constructors = true:suggestion
+
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel.required_prefix = _
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+
+#### StyleCop ####
+# StyleCop's defaults encode a house style from well before modern C#. The rules disabled
+# below are the ones that actively contradict current .NET conventions; everything else is
+# left on, and the build treats it as an error.
+
+# Requires `this.` on every member access. Contrary to .NET conventions.
+dotnet_diagnostic.SA1101.severity = none
+# Requires usings inside the namespace. The modern convention is outside, and file-scoped
+# namespaces make the StyleCop position untenable anyway.
+dotnet_diagnostic.SA1200.severity = none
+# Requires a copyright header comment in every file.
+dotnet_diagnostic.SA1633.severity = none
+# Forbids the leading underscore on private fields that .NET naming conventions require.
+dotnet_diagnostic.SA1309.severity = none
+# Fires because GenerateDocumentationFile is false. That is deliberate: this is an application,
+# not a published library, so there is no XML doc file to emit.
+dotnet_diagnostic.SA0001.severity = none
+
+# Documentation-completeness rules. Doc comments here explain decisions that are not obvious
+# from the code; mandating one on every member produces "Gets or sets the price." noise that
+# buries the comments actually worth reading.
+dotnet_diagnostic.SA1600.severity = none
+dotnet_diagnostic.SA1601.severity = none
+dotnet_diagnostic.SA1602.severity = none
+dotnet_diagnostic.SA1611.severity = none
+dotnet_diagnostic.SA1615.severity = none
+dotnet_diagnostic.SA1618.severity = none
+dotnet_diagnostic.SA1633.severity = none
+
+# Demands a blank line before a single-line comment, including comments that deliberately sit
+# tight against the line they annotate.
+dotnet_diagnostic.SA1512.severity = none
+# Demands documentation-comment style for comments that are just comments.
+dotnet_diagnostic.SA1005.severity = none

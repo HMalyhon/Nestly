@@ -15,4 +15,17 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <!--
+    StyleCop covers layout and naming; Sonar covers bug patterns, dead code and complexity.
+    They overlap very little, so both earn their place. Applied solution-wide here rather than
+    per project so a new csproj is analysed the moment it is created.
+
+    PrivateAssets="all" keeps them out of any package this repo might produce - they are build
+    tooling, not a dependency of the shipped code.
+  -->
+  <ItemGroup Label="Analyzers">
+    <PackageReference Include="StyleCop.Analyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <PackageReference Include="SonarAnalyzer.CSharp" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+  </ItemGroup>
+
 </Project>
