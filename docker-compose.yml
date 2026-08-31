@@ -1,0 +1,49 @@
+name: nestly
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
+    container_name: nestly-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - cluster.name=nestly
+
+      # Security is off because this is a throwaway local demo cluster with no
+      # data worth protecting. Never do this anywhere real.
+      - xpack.security.enabled=false
+
+      # Pinned explicitly rather than left to the default. Basic is free and
+      # perpetual; a self-generated *trial* would unlock the paid retrievers and
+      # then expire after 30 days, breaking the demo for anyone who clones this
+      # repo later. Nestly deliberately uses no feature above Basic.
+      - xpack.license.self_generated.type=basic
+
+      # No ELSER, no inference endpoints, no anomaly detection here -- embeddings
+      # are generated in .NET. Turning ML off saves ~1GB of heap and a chunk of
+      # startup time.
+      - xpack.ml.enabled=false
+
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      # Dependent services wait on this, so it must report genuine query
+      # readiness -- not just an open socket.
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' || exit 1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  elasticsearch-data:
