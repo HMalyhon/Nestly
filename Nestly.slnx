@@ -1,5 +1,9 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Nestly.Domain/Nestly.Domain.csproj" />
+    <Project Path="src/Nestly.Search/Nestly.Search.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Nestly.DataTrimmer/Nestly.DataTrimmer.csproj" />
   </Folder>
 </Solution>

@@ -10,6 +10,22 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
+  <ItemGroup Label="Elasticsearch">
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Microsoft.Extensions">
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup Label="Data">
+    <PackageVersion Include="CsvHelper" Version="33.1.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Analyzers">
     <!--
       1.1.118 is the newest stable, but it was released before C# 9 and misreports on
