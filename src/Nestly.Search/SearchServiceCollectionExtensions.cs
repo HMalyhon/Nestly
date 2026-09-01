@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nestly.Search.Configuration;
+using Nestly.Search.Indexing;
 
 namespace Nestly.Search;
 
@@ -29,6 +30,8 @@ public static class SearchServiceCollectionExtensions
         // singleton -- one per process, as Elastic's own guidance has it.
         services.AddSingleton(provider =>
             CreateClient(provider.GetRequiredService<IOptions<ElasticsearchOptions>>().Value));
+
+        services.AddSingleton<IListingIndexProvisioner, ListingIndexProvisioner>();
 
         return services;
     }
