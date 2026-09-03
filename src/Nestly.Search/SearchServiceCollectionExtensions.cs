@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Nestly.Search.Configuration;
 using Nestly.Search.Indexing;
+using Nestly.Search.Searching;
 
 namespace Nestly.Search;
 
@@ -32,6 +33,7 @@ public static class SearchServiceCollectionExtensions
             CreateClient(provider.GetRequiredService<IOptions<ElasticsearchOptions>>().Value));
 
         services.AddSingleton<IListingIndexProvisioner, ListingIndexProvisioner>();
+        services.AddSingleton<IListingSearchService, ListingSearchService>();
 
         return services;
     }
