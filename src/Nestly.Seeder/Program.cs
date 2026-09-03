@@ -2,16 +2,17 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Nestly.Search;
 
 namespace Nestly.Seeder;
 
 /// <summary>
-/// Reads data/listings.csv.gz, cleans it, and reports what came out:
+/// Reads data/listings.csv.gz, cleans it, and fills the listings index:
 /// <code>dotnet run --project src/Nestly.Seeder</code>
 /// </summary>
 internal static class Program
 {
-    private static int Main(string[] args)
+    private static async Task<int> Main(string[] args)
     {
         var overrides = new Dictionary<string, string?>(StringComparer.Ordinal);
 
@@ -37,20 +38,39 @@ internal static class Program
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        builder.Services.AddNestlySearch(builder.Configuration);
         builder.Services.AddSingleton<SeedRunner>();
+
+        // Ctrl+C cancels the run instead of killing it mid-bulk. The index is dropped and
+        // rebuilt from scratch on every run, so an interrupted seed leaves nothing to clean up
+        // beyond running it again.
+        using var cancellation = new CancellationTokenSource();
+
+        Console.CancelKeyPress += (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            cancellation.Cancel();
+        };
 
         try
         {
             using var host = builder.Build();
 
-            return host.Services.GetRequiredService<SeedRunner>().Run();
+            return await host.Services.GetRequiredService<SeedRunner>()
+                .RunAsync(cancellation.Token)
+                .ConfigureAwait(false);
         }
         catch (OptionsValidationException invalid)
         {
             // A settings problem is the operator's to fix, not a defect to debug, so it gets a
             // sentence rather than a stack trace.
-            Console.Error.WriteLine(invalid.Message);
+            await Console.Error.WriteLineAsync(invalid.Message).ConfigureAwait(false);
             return 2;
+        }
+        catch (OperationCanceledException)
+        {
+            await Console.Error.WriteLineAsync("cancelled").ConfigureAwait(false);
+            return 130;
         }
     }
 
@@ -71,6 +91,9 @@ internal static class Program
                 case "--count" when index < args.Length:
                     overrides[$"{SeederOptions.SectionName}:{nameof(SeederOptions.Limit)}"] = args[index++];
                     break;
+                case "--dry-run":
+                    overrides[$"{SeederOptions.SectionName}:{nameof(SeederOptions.DryRun)}"] = "true";
+                    break;
                 case "--help" or "-h":
                     PrintUsage();
                     return false;
@@ -86,5 +109,5 @@ internal static class Program
     }
 
     private static void PrintUsage() =>
-        Console.Error.WriteLine("usage: dotnet run --project src/Nestly.Seeder [--file <path>] [--count <n>]");
+        Console.Error.WriteLine("usage: dotnet run --project src/Nestly.Seeder [--file <path>] [--count <n>] [--dry-run]");
 }
