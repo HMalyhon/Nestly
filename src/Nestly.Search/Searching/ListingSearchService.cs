@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.Core.Search;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nestly.Domain;
 using Nestly.Search.Configuration;
@@ -9,20 +10,25 @@ using Nestly.Search.Querying;
 
 namespace Nestly.Search.Searching;
 
-internal sealed class ListingSearchService : IListingSearchService
+internal sealed partial class ListingSearchService : IListingSearchService
 {
     // Two snippets of roughly a sentence each: what fits on a result card.
     private const int FragmentSize = 160;
     private const int FragmentCount = 2;
 
     private readonly ElasticsearchClient _client;
+    private readonly ILogger<ListingSearchService> _logger;
     private readonly string _indexName;
 
-    public ListingSearchService(ElasticsearchClient client, IOptions<ElasticsearchOptions> options)
+    public ListingSearchService(
+        ElasticsearchClient client,
+        IOptions<ElasticsearchOptions> options,
+        ILogger<ListingSearchService> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         _client = client;
+        _logger = logger;
         _indexName = options.Value.IndexName;
     }
 
@@ -58,7 +64,17 @@ internal sealed class ListingSearchService : IListingSearchService
         if (!response.IsValidResponse)
         {
             response.TryGetOriginalException(out var cause);
-            throw new InvalidOperationException($"Listing search failed: {response.DebugInformation}", cause);
+
+            // DebugInformation holds the cluster address and the generated DSL. It belongs in the
+            // logs, not in an exception message that an error handler might render to a client.
+            LogFailure(response.DebugInformation);
+
+            var rejected = response.ApiCallDetails.HttpStatusCode is >= 400 and < 500;
+
+            throw new SearchException(
+                rejected ? "Elasticsearch rejected the search request." : "Elasticsearch is unavailable.",
+                rejected,
+                cause);
         }
 
         stopwatch.Stop();
@@ -107,4 +123,7 @@ internal sealed class ListingSearchService : IListingSearchService
             [ListingFields.Title] = new() { NumberOfFragments = 0 },
         },
     };
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Elasticsearch did not answer the search: {Details}")]
+    private partial void LogFailure(string details);
 }

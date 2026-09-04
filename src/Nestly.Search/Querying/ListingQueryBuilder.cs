@@ -68,9 +68,13 @@ public static class ListingQueryBuilder
             // field that says both, rather than a listing that scatters the words across three.
             Type = TextQueryType.BestFields,
 
-            // One typo tolerated on longer words. Search-as-you-type means half-typed words
-            // arrive constantly, and an exact-match-only query makes the UI feel broken.
+            // One typo tolerated on longer words, so a mistyped "brooklin" still finds Brooklyn.
             Fuzziness = new Fuzziness("AUTO"),
+
+            // Fuzzy matching only after the first two characters. Typos in an opening letter are
+            // rare, and without this every term walks a wide slice of the term dictionary --
+            // which is what made a long query take a second.
+            PrefixLength = 2,
         };
     }
 

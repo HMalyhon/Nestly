@@ -32,6 +32,7 @@ builder.Services.AddHealthChecks()
 
 // One error shape for everything, including failures the framework raises.
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<SearchExceptionHandler>();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();

@@ -12,6 +12,15 @@ public static class ListingSearchRequestValidator
     private const int MaxPageSize = 100;
     private const int MaxPage = 100;
 
+    // Every token in the query becomes a fuzzy clause across three fields, so cost is linear in
+    // length: 500 words takes 18 seconds, 1,000 times out. This is a search box, not an essay.
+    private const int MaxQueryLength = 200;
+
+    // The seeder normalises amenities onto 20 canonical values, and each one is a separate
+    // clause; the rest are keyword filters where a long list is meaningless too.
+    private const int MaxAmenities = 20;
+    private const int MaxFilterValues = 50;
+
     private const double MaxRadiusKm = 50;
 
     /// <summary>Adds a message per broken rule, and returns whether the request is usable.</summary>
@@ -34,11 +43,36 @@ public static class ListingSearchRequestValidator
             Fail(nameof(request.PageSize), $"PageSize must be between 1 and {MaxPageSize}.");
         }
 
+        if (request.Query?.Length > MaxQueryLength)
+        {
+            Fail(nameof(request.Query), $"Query must be {MaxQueryLength} characters or fewer.");
+        }
+
         var filters = request.Filters;
+
+        CheckCount(nameof(filters.Amenities), filters.Amenities.Count, MaxAmenities);
+        CheckCount(nameof(filters.Neighborhoods), filters.Neighborhoods.Count, MaxFilterValues);
+        CheckCount(nameof(filters.Boroughs), filters.Boroughs.Count, MaxFilterValues);
+        CheckCount(nameof(filters.RoomTypes), filters.RoomTypes.Count, MaxFilterValues);
+        CheckCount(nameof(filters.PropertyTypes), filters.PropertyTypes.Count, MaxFilterValues);
+        CheckCount(nameof(filters.Bedrooms), filters.Bedrooms.Count, MaxFilterValues);
+
+        void CheckCount(string field, int count, int max)
+        {
+            if (count > max)
+            {
+                Fail(field, $"{field} accepts at most {max} values.");
+            }
+        }
 
         if (filters.MinRent is < 0)
         {
             Fail(nameof(filters.MinRent), "MinRent cannot be negative.");
+        }
+
+        if (filters.MaxRent is < 0)
+        {
+            Fail(nameof(filters.MaxRent), "MaxRent cannot be negative.");
         }
 
         if (filters.MinRent is { } min && filters.MaxRent is { } max && min > max)
@@ -62,14 +96,24 @@ public static class ListingSearchRequestValidator
             Fail(nameof(filters.RadiusKm), $"RadiusKm must be between 0 and {MaxRadiusKm}.");
         }
 
-        if (filters.Near is { } near && (near.Lat is < -90 or > 90 || near.Lon is < -180 or > 180))
+        if (filters.Near is { } near && (!IsLatitude(near.Lat) || !IsLongitude(near.Lon)))
         {
             Fail(nameof(filters.Near), "Near must be a valid latitude and longitude.");
         }
 
-        if (filters.Within is { } bounds && (bounds.TopLat < bounds.BottomLat))
+        if (filters.Within is { } bounds)
         {
-            Fail(nameof(filters.Within), "Within.TopLat must be north of Within.BottomLat.");
+            if (bounds.TopLat < bounds.BottomLat)
+            {
+                Fail(nameof(filters.Within), "Within.TopLat must be north of Within.BottomLat.");
+            }
+
+            // Unchecked, a viewport clamped past a pole reaches Elasticsearch and fails there.
+            if (!IsLatitude(bounds.TopLat) || !IsLatitude(bounds.BottomLat) ||
+                !IsLongitude(bounds.LeftLon) || !IsLongitude(bounds.RightLon))
+            {
+                Fail(nameof(filters.Within), "Within must be valid latitudes and longitudes.");
+            }
         }
 
         if (request.Sort == ListingSort.DistanceAsc && filters.Near is null)
@@ -79,4 +123,8 @@ public static class ListingSearchRequestValidator
 
         return modelState.IsValid;
     }
+
+    private static bool IsLatitude(double value) => value is >= -90 and <= 90;
+
+    private static bool IsLongitude(double value) => value is >= -180 and <= 180;
 }

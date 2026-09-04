@@ -160,14 +160,17 @@ public static class ListingIndex
         properties.Add(ListingFields.PricePerNight, new IntegerNumberProperty());
         properties.Add(ListingFields.MonthlyRent, new IntegerNumberProperty());
 
-        // Narrow numeric types on purpose: bedrooms never reaches 255 and review scores carry
-        // one decimal place, so byte and half_float cost a fraction of the doc values a double
-        // would and lose nothing the UI can display.
+        // Narrow numeric types where the range is known: bedrooms and guests fit a byte,
+        // bathrooms come in halves, minimum stays fit a short.
         properties.Add(ListingFields.Bedrooms, new ByteNumberProperty());
         properties.Add(ListingFields.Accommodates, new ByteNumberProperty());
         properties.Add(ListingFields.Bathrooms, new HalfFloatNumberProperty());
-        properties.Add(ListingFields.ReviewScore, new HalfFloatNumberProperty());
         properties.Add(ListingFields.MinimumNights, new ShortNumberProperty());
+
+        // float rather than half_float, though the values would fit: sorting a half_float
+        // descending fails outright when some documents lack the field, and 1,428 listings have
+        // no review score. Ascending is fine, which is what made it easy to miss.
+        properties.Add(ListingFields.ReviewScore, new FloatNumberProperty());
 
         properties.Add(ListingFields.LastReviewedAt, new DateProperty());
 
