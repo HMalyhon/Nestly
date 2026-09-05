@@ -52,7 +52,11 @@ internal sealed partial class ListingSearchService : IListingSearchService
                     .Sort(ListingQueryBuilder.Sort(request.Sort, request.Filters.Near))
 
                     // 384 floats per document, useless to a result card.
-                    .SourceExcludes(ListingFields.DescriptionVector);
+                    .SourceExcludes(ListingFields.DescriptionVector)
+
+                    // Facets ride along on the same request: a second round trip to count what
+                    // this one already matched would double the latency the UI feels.
+                    .Aggregations(ListingFacetAggregations.Build(request.Query, request.Filters));
 
                 if (!string.IsNullOrWhiteSpace(request.Query))
                 {
@@ -83,7 +87,7 @@ internal sealed partial class ListingSearchService : IListingSearchService
         {
             Total = response.Total,
             Hits = [.. response.Hits.Select(hit => ToHit(hit, request.Filters.Near))],
-            Facets = new ListingFacets(),
+            Facets = FacetReader.Read(response.Aggregations),
             ElapsedMs = stopwatch.ElapsedMilliseconds,
         };
     }
