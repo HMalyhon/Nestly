@@ -108,8 +108,8 @@ public static class ListingIndex
                 // dictionary on every keystroke. It keeps the standard analyzer rather than
                 // inheriting the parent's: stemming a half-typed word truncates the prefix the
                 // shingles exist to match.
-                { "sayt", new SearchAsYouTypeProperty() },
-                { "keyword", new KeywordProperty { IgnoreAbove = 256 } },
+                { ListingFields.SaytSuffix, new SearchAsYouTypeProperty() },
+                { ListingFields.KeywordSuffix, new KeywordProperty { IgnoreAbove = 256 } },
             },
         });
 
@@ -145,8 +145,8 @@ public static class ListingIndex
             // no duplicated source data.
             Fields = new Properties
             {
-                { "text", new TextProperty { Analyzer = TextAnalyzer, SearchAnalyzer = SearchAnalyzer } },
-                { "suggest", new CompletionProperty() },
+                { ListingFields.TextSuffix, new TextProperty { Analyzer = TextAnalyzer, SearchAnalyzer = SearchAnalyzer } },
+                { ListingFields.SuggestSuffix, new CompletionProperty() },
             },
         });
 

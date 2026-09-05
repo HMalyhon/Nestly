@@ -121,10 +121,10 @@ internal sealed partial class ListingSearchService : IListingSearchService
                 FragmentSize = FragmentSize,
                 NumberOfFragments = FragmentCount,
 
-                // Reads stored offsets instead of re-analysing the field.
+                // Unified is the default; named because it is the one that handles phrase
+                // and fuzzy matches correctly, which the plain highlighter does not.
                 Type = HighlighterType.Unified,
             },
-            [ListingFields.Title] = new() { NumberOfFragments = 0 },
         },
     };
 

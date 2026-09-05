@@ -30,7 +30,7 @@ public sealed record ListingFilters
 
     public double? MinReviewScore { get; init; }
 
-    /// <summary>Radius search centre. Ignored unless <see cref="RadiusKm"/> is also supplied.</summary>
+    /// <summary>Radius search centre. Filters only when <see cref="RadiusKm"/> is supplied; on its own it just measures distance to each hit.</summary>
     public GeoPoint? Near { get; init; }
 
     public double? RadiusKm { get; init; }

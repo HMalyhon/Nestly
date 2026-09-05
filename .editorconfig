@@ -78,10 +78,3 @@ dotnet_diagnostic.SA1602.severity = none
 dotnet_diagnostic.SA1611.severity = none
 dotnet_diagnostic.SA1615.severity = none
 dotnet_diagnostic.SA1618.severity = none
-dotnet_diagnostic.SA1633.severity = none
-
-# Demands a blank line before a single-line comment, including comments that deliberately sit
-# tight against the line they annotate.
-dotnet_diagnostic.SA1512.severity = none
-# Demands documentation-comment style for comments that are just comments.
-dotnet_diagnostic.SA1005.severity = none

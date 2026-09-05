@@ -5,7 +5,7 @@ public sealed record ListingHit
 {
     public required Listing Listing { get; init; }
 
-    /// <summary>Fused RRF score, not a raw Elasticsearch <c>_score</c>.</summary>
+    /// <summary>Relevance score, zero when the results were sorted by something else. Becomes the fused RRF score once hybrid search lands.</summary>
     public required double Score { get; init; }
 
     /// <summary>Highlighted description snippets, with <c>&lt;em&gt;</c> around matches.</summary>

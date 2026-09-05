@@ -39,14 +39,13 @@ internal sealed class DatasetOptions
     /// <summary>Seeded from the snapshot date, so the choice of rows is reproducible and not a matter of taste.</summary>
     public int Seed { get; init; }
 
-    /// <summary>
-    /// The upstream tail reaches $31,211/night. Keeping it would stretch the price facet far
-    /// enough to make the slider useless for the 99% of listings below the ceiling, and those
-    /// outliers are data-entry noise more than inventory.
-    /// </summary>
     [Range(0, 100_000)]
     public int MinPricePerNight { get; init; }
 
+    /// <summary>
+    /// The upstream tail reaches $31,211/night, which would stretch the price facet far enough to
+    /// make the slider useless for the 99% of listings below the ceiling.
+    /// </summary>
     [Range(1, 100_000)]
     public int MaxPricePerNight { get; init; }
 }

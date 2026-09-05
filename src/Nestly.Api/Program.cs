@@ -12,9 +12,14 @@ builder.Services
 
     // Enums cross the wire as names: a client sending {"sort": 1} is one reorder away from
     // meaning something else.
-    .AddJsonOptions(json => json.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    .AddJsonOptions(json =>
+    {
+        json.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
 
-builder.Services.Configure<CorsOptions>(builder.Configuration.GetSection(CorsOptions.SectionName));
+        // Absent means absent: without this every hit carries "descriptionVector": null, a field
+        // _source already excludes.
+        json.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    });
 
 builder.Services.AddCors(cors => cors.AddPolicy(
     CorsOptions.PolicyName,
@@ -28,7 +33,7 @@ builder.Services.AddCors(cors => cors.AddPolicy(
     }));
 
 builder.Services.AddHealthChecks()
-    .AddCheck<ElasticsearchHealthCheck>("elasticsearch", tags: ["ready"]);
+    .AddCheck<ElasticsearchHealthCheck>("elasticsearch", timeout: TimeSpan.FromSeconds(2));
 
 // One error shape for everything, including failures the framework raises.
 builder.Services.AddProblemDetails();

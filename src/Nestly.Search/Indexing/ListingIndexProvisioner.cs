@@ -35,18 +35,6 @@ internal sealed partial class ListingIndexProvisioner : IListingIndexProvisioner
         return response.Exists;
     }
 
-    public async Task<bool> CreateIfMissingAsync(CancellationToken cancellationToken = default)
-    {
-        if (await ExistsAsync(cancellationToken).ConfigureAwait(false))
-        {
-            LogAlreadyExists(_indexName);
-            return false;
-        }
-
-        await CreateAsync(cancellationToken).ConfigureAwait(false);
-        return true;
-    }
-
     public async Task RecreateAsync(CancellationToken cancellationToken = default)
     {
         if (await ExistsAsync(cancellationToken).ConfigureAwait(false))
@@ -87,7 +75,4 @@ internal sealed partial class ListingIndexProvisioner : IListingIndexProvisioner
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Deleted Elasticsearch index {Index}.")]
     private partial void LogDeleted(string index);
-
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Elasticsearch index {Index} already exists; leaving it alone.")]
-    private partial void LogAlreadyExists(string index);
 }

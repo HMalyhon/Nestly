@@ -26,15 +26,21 @@ public static class ListingFields
     public const string MinimumNights = "minimumNights";
     public const string LastReviewedAt = "lastReviewedAt";
 
+    // Sub-field names, used both to build the mapping and to query it.
+    public const string SaytSuffix = "sayt";
+    public const string KeywordSuffix = "keyword";
+    public const string TextSuffix = "text";
+    public const string SuggestSuffix = "suggest";
+
     /// <summary>Prefix-matches partial words for search-as-you-type on the title.</summary>
-    public const string TitleSayt = $"{Title}.sayt";
+    public const string TitleSayt = $"{Title}.{SaytSuffix}";
 
     /// <summary>Unanalyzed title, for sorting and exact matching.</summary>
-    public const string TitleKeyword = $"{Title}.keyword";
+    public const string TitleKeyword = $"{Title}.{KeywordSuffix}";
 
     /// <summary>Analyzed neighborhood, so "east village" matches "East Village" in free text.</summary>
-    public const string NeighborhoodText = $"{Neighborhood}.text";
+    public const string NeighborhoodText = $"{Neighborhood}.{TextSuffix}";
 
     /// <summary>Completion suggester over neighborhood names.</summary>
-    public const string NeighborhoodSuggest = $"{Neighborhood}.suggest";
+    public const string NeighborhoodSuggest = $"{Neighborhood}.{SuggestSuffix}";
 }
