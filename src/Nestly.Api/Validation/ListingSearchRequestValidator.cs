@@ -43,12 +43,30 @@ public static class ListingSearchRequestValidator
             Fail(nameof(request.PageSize), $"PageSize must be between 1 and {MaxPageSize}.");
         }
 
-        if (request.Query?.Length > MaxQueryLength)
-        {
-            Fail(nameof(request.Query), $"Query must be {MaxQueryLength} characters or fewer.");
-        }
+        ValidateSearch(request.Query, request.Filters, modelState);
 
         var filters = request.Filters;
+
+        if (request.Sort == ListingSort.DistanceAsc && filters.Near is null)
+        {
+            Fail(nameof(request.Sort), "Sorting by distance requires Filters.Near.");
+        }
+
+        return modelState.IsValid;
+    }
+
+    /// <summary>The rules the search and the map share: free text and filters.</summary>
+    public static void ValidateSearch(string? query, ListingFilters filters, ModelStateDictionary modelState)
+    {
+        ArgumentNullException.ThrowIfNull(filters);
+        ArgumentNullException.ThrowIfNull(modelState);
+
+        void Fail(string field, string message) => modelState.AddModelError(field, message);
+
+        if (query?.Length > MaxQueryLength)
+        {
+            Fail("Query", $"Query must be {MaxQueryLength} characters or fewer.");
+        }
 
         CheckCount(nameof(filters.Amenities), filters.Amenities.Count, MaxAmenities);
         CheckCount(nameof(filters.Neighborhoods), filters.Neighborhoods.Count, MaxFilterValues);
@@ -56,14 +74,6 @@ public static class ListingSearchRequestValidator
         CheckCount(nameof(filters.RoomTypes), filters.RoomTypes.Count, MaxFilterValues);
         CheckCount(nameof(filters.PropertyTypes), filters.PropertyTypes.Count, MaxFilterValues);
         CheckCount(nameof(filters.Bedrooms), filters.Bedrooms.Count, MaxFilterValues);
-
-        void CheckCount(string field, int count, int max)
-        {
-            if (count > max)
-            {
-                Fail(field, $"{field} accepts at most {max} values.");
-            }
-        }
 
         if (filters.MinRent is < 0)
         {
@@ -116,12 +126,13 @@ public static class ListingSearchRequestValidator
             }
         }
 
-        if (request.Sort == ListingSort.DistanceAsc && filters.Near is null)
+        void CheckCount(string field, int count, int max)
         {
-            Fail(nameof(request.Sort), "Sorting by distance requires Filters.Near.");
+            if (count > max)
+            {
+                Fail(field, $"{field} accepts at most {max} values.");
+            }
         }
-
-        return modelState.IsValid;
     }
 
     private static bool IsLatitude(double value) => value is >= -90 and <= 90;
