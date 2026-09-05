@@ -35,6 +35,7 @@ public static class SearchServiceCollectionExtensions
         services.AddSingleton<IListingIndexProvisioner, ListingIndexProvisioner>();
         services.AddSingleton<IListingSearchService, ListingSearchService>();
         services.AddSingleton<IListingMapService, ListingMapService>();
+        services.AddSingleton<IListingDetailService, ListingDetailService>();
         services.AddSingleton<IListingSuggestService, ListingSuggestService>();
 
         return services;
