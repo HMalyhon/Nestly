@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -89,7 +90,18 @@ internal static class Program
                     overrides[$"{SeederOptions.SectionName}:{nameof(SeederOptions.DataPath)}"] = args[index++];
                     break;
                 case "--count" when index < args.Length:
-                    overrides[$"{SeederOptions.SectionName}:{nameof(SeederOptions.Limit)}"] = args[index++];
+                    var count = args[index++];
+
+                    // Checked here because the configuration binder throws before validation
+                    // runs, and its exception is a stack trace rather than a sentence.
+                    if (!int.TryParse(count, CultureInfo.InvariantCulture, out _))
+                    {
+                        Console.Error.WriteLine($"--count expects a number, got: {count}");
+                        exitCode = 2;
+                        return false;
+                    }
+
+                    overrides[$"{SeederOptions.SectionName}:{nameof(SeederOptions.Limit)}"] = count;
                     break;
                 case "--dry-run":
                     overrides[$"{SeederOptions.SectionName}:{nameof(SeederOptions.DryRun)}"] = "true";

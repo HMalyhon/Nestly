@@ -26,10 +26,14 @@ internal static partial class HtmlText
             return string.Empty;
         }
 
+        // Decode first, strip second. The other order looks equivalent and is not: entities are
+        // invisible to the tag pattern, so "&lt;img onerror=...&gt;" would survive the strip and
+        // the decode would then turn it back into live markup.
+        var text = WebUtility.HtmlDecode(raw);
+
         // Tags become a space rather than nothing: "kitchen<br />Bedroom" is two sentences, and
         // deleting the tag outright would index "kitchenBedroom" as a single term.
-        var text = TagPattern.Replace(raw, " ");
-        text = WebUtility.HtmlDecode(text);
+        text = TagPattern.Replace(text, " ");
 
         return WhitespacePattern.Replace(text, " ").Trim();
     }

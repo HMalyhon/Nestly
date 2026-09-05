@@ -110,6 +110,10 @@ internal sealed partial class ListingSearchService : IListingSearchService
 
     private static Highlight Highlight() => new()
     {
+        // Escapes the field text, so the only markup in a fragment is the highlighter's own
+        // <em>. Without it a description containing markup would be handed to a browser intact.
+        Encoder = HighlighterEncoder.Html,
+
         Fields = new Dictionary<Field, HighlightField>
         {
             [ListingFields.Description] = new()

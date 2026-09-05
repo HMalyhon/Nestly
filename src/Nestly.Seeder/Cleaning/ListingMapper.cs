@@ -67,6 +67,12 @@ internal static class ListingMapper
             return false;
         }
 
+        if (!TryParseByte(row.Accommodates, out var accommodates))
+        {
+            reason = ListingSkipReason.Accommodates;
+            return false;
+        }
+
         listing = new Listing
         {
             Id = row.Id.Trim(),
@@ -79,7 +85,7 @@ internal static class ListingMapper
             MonthlyRent = pricePerNight * NightsPerMonth,
             Bedrooms = bedrooms,
             Bathrooms = bathrooms,
-            Accommodates = TryParseByte(row.Accommodates, out var accommodates) ? accommodates : (byte)0,
+            Accommodates = accommodates,
             PropertyType = row.PropertyType.Trim(),
             RoomType = row.RoomType.Trim(),
             Amenities = AmenityCatalog.Normalize(row.Amenities),
@@ -154,18 +160,29 @@ internal static class ListingMapper
     private static bool TryParseDouble(string? raw, out double value) =>
         double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
 
+    /// <summary>Parses a whole-number count, rejecting anything the index could not hold.</summary>
+    // Elasticsearch's byte is signed, so 127 is the ceiling -- not 255. Out-of-range values are
+    // rejected rather than clamped: a listing claiming 900 bedrooms is bad data, and clamping it
+    // to a plausible number is how bad data stops looking like bad data.
     private static bool TryParseByte(string? raw, out byte value)
     {
         value = 0;
 
         // Written as decimals upstream ("1.0"), and a bedroom count is never fractional.
-        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ||
+            double.IsNaN(parsed))
         {
             return false;
         }
 
         var rounded = Math.Round(parsed, MidpointRounding.AwayFromZero);
-        value = rounded is >= 0 and <= byte.MaxValue ? (byte)rounded : byte.MaxValue;
+
+        if (rounded is < 0 or > sbyte.MaxValue)
+        {
+            return false;
+        }
+
+        value = (byte)rounded;
         return true;
     }
 

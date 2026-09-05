@@ -63,9 +63,22 @@ internal sealed partial class SeedRunner
         var listings = source.Stream(path, _options.Limit);
         var stopwatch = Stopwatch.StartNew();
 
-        var indexed = _options.DryRun
-            ? Parse(listings)
-            : await IndexAsync(listings, cancellationToken).ConfigureAwait(false);
+        int indexed;
+
+        try
+        {
+            indexed = _options.DryRun
+                ? Parse(listings)
+                : await IndexAsync(listings, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            // Broad on purpose: this is the process boundary, and BulkAll can surface anything
+            // from a rejected document to a transport error. Either way the operator needs the
+            // reason and a non-zero exit, not a stack trace.
+            LogSeedFailed(failure);
+            return 1;
+        }
 
         stopwatch.Stop();
 
@@ -213,6 +226,9 @@ internal sealed partial class SeedRunner
             LogSkipped(count, reason);
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Seeding failed.")]
+    private partial void LogSeedFailed(Exception failure);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Dataset not found at {Path}. Set Seeder:DataPath or pass --file.")]
     private partial void LogDatasetMissing(string path);

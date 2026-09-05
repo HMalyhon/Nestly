@@ -10,4 +10,5 @@ internal enum ListingSkipReason
     Description,
     Bathrooms,
     Bedrooms,
+    Accommodates,
 }
