@@ -32,6 +32,16 @@
     <PackageVersion Include="CsvHelper" Version="33.1.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Embeddings">
+    <!--
+      all-MiniLM-L6-v2 runs in-process on the CPU package. The alternative was a Python sidecar
+      or a managed Elasticsearch feature that needs a licence above Basic; both were rejected in
+      the plan, and this is what replaces them.
+    -->
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.29.0" />
+    <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Analyzers">
     <!--
       1.1.118 is the newest stable, but it was released before C# 9 and misreports on
