@@ -10,11 +10,30 @@ import type { ReactElement } from 'react';
 
 const SNIPPET_LENGTH = 180;
 
-export function ListingCard({ hit }: { hit: ListingHit }): ReactElement {
+interface ListingCardProps {
+  hit: ListingHit;
+  isHighlighted: boolean;
+  onHover: (id: string | undefined) => void;
+}
+
+export function ListingCard({ hit, isHighlighted, onHover }: ListingCardProps): ReactElement {
   const { listing } = hit;
 
   return (
-    <Card component="li" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Card
+      component="li"
+      data-listing={listing.id}
+      onMouseEnter={() => { onHover(listing.id); }}
+      onMouseLeave={() => { onHover(undefined); }}
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        borderColor: isHighlighted ? 'secondary.main' : undefined,
+        boxShadow: isHighlighted ? 3 : 0,
+        transition: 'box-shadow 120ms ease-out, border-color 120ms ease-out',
+      }}
+    >
       <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, flexGrow: 1 }}>
         <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
           <Box>

@@ -1,4 +1,4 @@
-import type { ListingSearchRequest, ListingSearchResponse } from './types';
+import type { ListingMapRequest, ListingSearchRequest, ListingSearchResponse, MapResponse } from './types';
 
 // Relative by default, so the app calls its own origin: Vite proxies /api in dev, nginx does it
 // in Compose. Set VITE_API_BASE_URL only to point a local UI at an API somewhere else.
@@ -74,4 +74,10 @@ export function searchListings(
   signal: AbortSignal,
 ): Promise<ListingSearchResponse> {
   return request('/api/listings/search', { method: 'POST', body: JSON.stringify(body), signal });
+}
+
+// A separate call, not a slice of the search: panning must not re-transfer descriptions and
+// amenities for everything on screen.
+export function mapListings(body: ListingMapRequest, signal: AbortSignal): Promise<MapResponse> {
+  return request('/api/listings/map', { method: 'POST', body: JSON.stringify(body), signal });
 }

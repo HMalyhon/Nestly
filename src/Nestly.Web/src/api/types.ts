@@ -99,6 +99,37 @@ export interface ListingSearchResponse {
   elapsedMs: number;
 }
 
+export interface MapPin {
+  id: string;
+  lat: number;
+  lon: number;
+  monthlyRent: number;
+}
+
+export interface MapCluster {
+  lat: number;
+  lon: number;
+  count: number;
+  medianRent: number;
+}
+
+export interface MapResponse {
+  total: number;
+  pins: MapPin[];
+  clusters: MapCluster[];
+
+  /** True when the match was too large for individual pins and Elasticsearch aggregated instead. */
+  isClustered: boolean;
+}
+
+export interface ListingMapRequest {
+  query?: string;
+  filters?: ListingFilters;
+
+  /** Leaflet zoom, which sizes the grid cells when the result clusters. */
+  zoom?: number;
+}
+
 export type SuggestionKind = 'Neighborhood' | 'Listing';
 
 export interface Suggestion {

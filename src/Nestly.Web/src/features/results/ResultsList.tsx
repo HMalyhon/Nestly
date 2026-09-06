@@ -1,4 +1,5 @@
 import { Box, Button, Stack, Typography } from '@mui/material';
+import { useEffect, useRef } from 'react';
 import { formatCount } from '../../format';
 import { ListingCard } from './ListingCard';
 import { ResultsSkeleton } from './ResultsSkeleton';
@@ -17,9 +18,33 @@ interface ResultsListProps {
   isStale: boolean;
 
   onFirstPage: () => void;
+
+  /** The listing the cursor or a map click is on. */
+  highlightedId: string | undefined;
+
+  onHover: (id: string | undefined) => void;
+
+  /** Set when the highlight came from the map, so the list should catch up to it. */
+  scrollToId: string | undefined;
 }
 
-export function ResultsList({ data, isPending, isStale, onFirstPage }: ResultsListProps): ReactElement {
+export function ResultsList({
+  data, isPending, isStale, onFirstPage, highlightedId, onHover, scrollToId,
+}: ResultsListProps): ReactElement {
+  const list = useRef<HTMLUListElement>(null);
+
+  // A clicked pin is often not on the page of twenty being shown, so this is a best effort: bring
+  // the card into view when it exists and do nothing when it does not.
+  useEffect(() => {
+    if (scrollToId === undefined) {
+      return;
+    }
+
+    list.current
+      ?.querySelector(`[data-listing="${scrollToId}"]`)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [scrollToId]);
+
   // Two different empty screens, and conflating them is how a paging bug reads as "no results".
   const noMatches = data?.total === 0;
   const pastTheEnd = data !== undefined && data.total > 0 && data.hits.length === 0;
@@ -28,6 +53,7 @@ export function ResultsList({ data, isPending, isStale, onFirstPage }: ResultsLi
     <>
       <Box
         component="ul"
+        ref={list}
         aria-label="Listings"
         sx={{
           display: 'grid',
@@ -45,7 +71,14 @@ export function ResultsList({ data, isPending, isStale, onFirstPage }: ResultsLi
       >
         {isPending
           ? <ResultsSkeleton count={SKELETON_COUNT} />
-          : data?.hits.map((hit) => <ListingCard key={hit.listing.id} hit={hit} />)}
+          : data?.hits.map((hit) => (
+            <ListingCard
+              key={hit.listing.id}
+              hit={hit}
+              isHighlighted={hit.listing.id === highlightedId}
+              onHover={onHover}
+            />
+          ))}
       </Box>
 
       {noMatches && (

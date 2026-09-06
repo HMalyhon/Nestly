@@ -63,7 +63,8 @@ export function FacetRail({ facets, filters, onChange }: FacetRailProps): ReactE
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="subtitle1" component="h2">Filters</Typography>
         {active > 0 && (
-          <Button size="small" onClick={() => { onChange({}); }}>
+          // Keeps the viewport: where the map is looking is not one of the choices being cleared.
+          <Button size="small" onClick={() => { onChange(filters.within ? { within: filters.within } : {}); }}>
             Clear {active}
           </Button>
         )}

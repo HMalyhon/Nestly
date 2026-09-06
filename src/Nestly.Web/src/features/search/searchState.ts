@@ -1,4 +1,4 @@
-import type { ListingFilters, ListingSearchRequest, ListingSort } from '../../api/types';
+import type { GeoBounds, ListingFilters, ListingMapRequest, ListingSearchRequest, ListingSort } from '../../api/types';
 
 export const PAGE_SIZE = 20;
 
@@ -7,6 +7,13 @@ export const MAX_PAGE = 100;
 
 /** Mirrors MaxQueryLength in the same validator. */
 export const MAX_QUERY_LENGTH = 200;
+
+/** Mirrors MinZoom/MaxZoom in ListingMapRequestValidator, which are Leaflet's raster range. */
+export const MIN_ZOOM = 1;
+export const MAX_ZOOM = 20;
+
+/** Manhattan and the inner boroughs at a glance, for a first visit with no bbox in the URL. */
+export const DEFAULT_VIEW = { center: [40.7255, -73.955] as [number, number], zoom: 12 };
 
 /**
  * The sorts the UI offers, in order.
@@ -40,9 +47,39 @@ export interface SearchState {
   sort: ListingSort;
   page: number;
   filters: ListingFilters;
+
+  /** Drives the grid cell size when the map clusters; not a filter. */
+  zoom: number;
 }
 
-export const DEFAULT_SEARCH: SearchState = { query: '', sort: 'Relevance', page: 1, filters: {} };
+export const DEFAULT_SEARCH: SearchState = {
+  query: '',
+  sort: 'Relevance',
+  page: 1,
+  filters: {},
+  zoom: DEFAULT_VIEW.zoom,
+};
+
+// Leaflet's own toBBoxString order, so the value round-trips through the map without reordering.
+const BBOX_PARTS = 4;
+
+function readBounds(value: string | null): GeoBounds | undefined {
+  const parts = value?.split(',').map(Number) ?? [];
+
+  if (parts.length !== BBOX_PARTS || parts.some((part) => !Number.isFinite(part))) {
+    return undefined;
+  }
+
+  const [west, south, east, north] = parts as [number, number, number, number];
+
+  return { topLat: north, leftLon: west, bottomLat: south, rightLon: east };
+}
+
+export function writeBounds(bounds: GeoBounds): string {
+  return [bounds.leftLon, bounds.bottomLat, bounds.rightLon, bounds.topLat]
+    .map((part) => part.toFixed(5))
+    .join(',');
+}
 
 function readSort(value: string | null): ListingSort {
   return SORT_OPTIONS.find((option) => option.value === value)?.value ?? DEFAULT_SEARCH.sort;
@@ -81,6 +118,12 @@ function readFilters(params: URLSearchParams): ListingFilters {
     filters.bedrooms = bedrooms;
   }
 
+  const within = readBounds(params.get('bbox'));
+
+  if (within) {
+    filters.within = within;
+  }
+
   const minRent = readNumber(params.get('minRent'));
   const maxRent = readNumber(params.get('maxRent'));
 
@@ -102,6 +145,7 @@ export function readSearchState(params: URLSearchParams): SearchState {
     sort: readSort(params.get('sort')),
     page: readPage(params.get('page')),
     filters: readFilters(params),
+    zoom: Math.min(Math.max(Number(params.get('z')) || DEFAULT_VIEW.zoom, MIN_ZOOM), MAX_ZOOM),
   };
 }
 
@@ -135,6 +179,13 @@ export function writeSearchState(state: SearchState): URLSearchParams {
     params.set('maxRent', String(state.filters.maxRent));
   }
 
+  // Where the map is looking, not something the user chose from a list -- so it survives "clear"
+  // and does not count towards the active-filter badge.
+  if (state.filters.within) {
+    params.set('bbox', writeBounds(state.filters.within));
+    params.set('z', String(state.zoom));
+  }
+
   // Last, so the interesting part of a shared link is the part people read.
   if (state.page !== DEFAULT_SEARCH.page) {
     params.set('page', String(state.page));
@@ -154,6 +205,10 @@ export function countFilters(filters: ListingFilters): number {
 /** How many pages the UI may offer for a result set, within what the API will serve. */
 export function pageCount(total: number): number {
   return Math.min(Math.ceil(total / PAGE_SIZE), MAX_PAGE);
+}
+
+export function toMapRequest(state: SearchState): ListingMapRequest {
+  return { query: state.query, filters: state.filters, zoom: state.zoom };
 }
 
 export function toRequest(state: SearchState): ListingSearchRequest {

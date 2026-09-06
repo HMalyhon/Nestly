@@ -1,43 +1,62 @@
 import FilterListIcon from '@mui/icons-material/FilterList';
 import {
-  Alert, AppBar, Badge, Box, Button, Container, Drawer, Pagination, Stack, Toolbar, Typography, useMediaQuery,
+  Alert, AppBar, Badge, Box, Button, Container, Drawer, Pagination, Stack, ToggleButton,
+  ToggleButtonGroup, Toolbar, Typography, useMediaQuery,
 } from '@mui/material';
 import { visuallyHidden } from '@mui/utils';
 import { useRef, useState } from 'react';
 import { FacetRail } from './features/facets/FacetRail';
+import { MapPane } from './features/map/MapPane';
+import { useListingMap } from './features/map/useListingMap';
 import { ResultsList } from './features/results/ResultsList';
 import { SearchBar } from './features/search/SearchBar';
 import { SortSelect } from './features/search/SortSelect';
-import { countFilters, pageCount, readSearchState, toRequest, writeSearchState } from './features/search/searchState';
+import {
+  countFilters, pageCount, readSearchState, toMapRequest, toRequest, writeSearchState,
+} from './features/search/searchState';
 import { useListingSearch } from './features/search/useListingSearch';
 import { formatCount } from './format';
 import { useDebounced } from './hooks/useDebounced';
 import { useUrlState } from './hooks/useUrlState';
-import type { ListingFilters, ListingSort } from './api/types';
+import type { GeoBounds, ListingFilters, ListingSort } from './api/types';
 import type { ReactElement } from 'react';
 
 const DEBOUNCE_MS = 200;
 const RAIL_WIDTH = 272;
 
+/** Sticky panes stop below the app bar and leave the page margin visible. */
+const PANE_HEIGHT = 'calc(100vh - 148px)';
+
 export function App(): ReactElement {
   const [params, writeParams] = useUrlState();
-  const { query, sort, page, filters } = readSearchState(params);
+  const state = readSearchState(params);
+  const { query, sort, page, filters } = state;
 
   // The URL is the only copy of the search -- the controls read it back, so there is no second
   // state to keep in step and the back button needs no special case. Only the request is debounced.
   const settled = useDebounced(query, DEBOUNCE_MS);
 
-  // No useMemo: React Query hashes the key structurally, so a stable reference buys nothing.
-  const { data, isPending, isError, error, isPlaceholderData } =
-    useListingSearch(toRequest({ query: settled, sort, page, filters }));
-
   const heading = useRef<HTMLHeadingElement>(null);
   const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
   const wideEnoughForRail = useMediaQuery((theme) => theme.breakpoints.up('md'));
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const wideEnoughForMap = useMediaQuery((theme) => theme.breakpoints.up('lg'));
 
-  const type = (next: string): void => {
-    writeParams(writeSearchState({ query: next, sort, page: 1, filters }), 'replace');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [pane, setPane] = useState<'list' | 'map'>('list');
+  const [hoveredId, setHoveredId] = useState<string>();
+  const [pinnedId, setPinnedId] = useState<string>();
+
+  const mapVisible = wideEnoughForMap || pane === 'map';
+
+  // No useMemo: React Query hashes the key structurally, so a stable reference buys nothing.
+  const { data, isPending, isError, error, isPlaceholderData } =
+    useListingSearch(toRequest({ ...state, query: settled }));
+
+  // Only while the map is on screen -- there is no point fetching markers nobody can see.
+  const map = useListingMap(toMapRequest({ ...state, query: settled }), mapVisible);
+
+  const write = (next: Partial<typeof state>, mode: 'push' | 'replace'): void => {
+    writeParams(writeSearchState({ ...state, ...next }), mode);
   };
 
   const jumpToTop = (): void => {
@@ -48,23 +67,37 @@ export function App(): ReactElement {
   };
 
   const move = (nextSort: ListingSort, nextPage: number): void => {
-    writeParams(writeSearchState({ query, sort: nextSort, page: nextPage, filters }), 'push');
+    write({ sort: nextSort, page: nextPage }, 'push');
     jumpToTop();
   };
 
   // Narrowing the results invalidates the page you were on, so every filter change returns to 1.
-  const filter = (next: ListingFilters): void => {
-    writeParams(writeSearchState({ query, sort, page: 1, filters: next }), 'push');
+  const filter = (next: ListingFilters): void => { write({ filters: next, page: 1 }, 'push'); };
+
+  // Replace, not push: a pan is a continuous gesture, and a history entry per frame of it would
+  // make the back button useless.
+  const look = (within: GeoBounds, nextZoom: number): void => {
+    write({ filters: { ...filters, within }, zoom: nextZoom, page: 1 }, 'replace');
   };
 
   const pages = data ? pageCount(data.total) : 0;
   const activeFilters = countFilters(filters);
   const rail = <FacetRail facets={data?.facets} filters={filters} onChange={filter} />;
 
+  const mapPane = (
+    <MapPane
+      data={map.data}
+      initialBounds={filters.within}
+      onViewChange={look}
+      highlightedId={hoveredId ?? pinnedId}
+      onSelect={setPinnedId}
+    />
+  );
+
   return (
     <>
       <AppBar position="sticky" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Container maxWidth="xl">
+        <Container maxWidth={false}>
           <Toolbar disableGutters sx={{ gap: 2, py: 1.5, flexWrap: 'wrap' }}>
             {/* A wordmark, not the page's heading: on a search page the heading describes the
                 search, and it lives in <main> below. */}
@@ -72,7 +105,7 @@ export function App(): ReactElement {
               Nestly
             </Typography>
             <Box sx={{ flexGrow: 1, minWidth: 240 }}>
-              <SearchBar value={query} onChange={type} />
+              <SearchBar value={query} onChange={(next) => { write({ query: next, page: 1 }, 'replace'); }} />
             </Box>
             {!wideEnoughForRail && (
               <Button
@@ -90,7 +123,7 @@ export function App(): ReactElement {
         </Container>
       </AppBar>
 
-      <Container component="main" maxWidth="xl" sx={{ py: 3 }}>
+      <Container component="main" maxWidth={false} sx={{ py: 3 }}>
         <Typography component="h1" ref={heading} tabIndex={-1} sx={visuallyHidden}>
           Apartment search
         </Typography>
@@ -98,8 +131,12 @@ export function App(): ReactElement {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: `${String(RAIL_WIDTH)}px minmax(0, 1fr)` },
-            gap: 4,
+            gridTemplateColumns: {
+              xs: '1fr',
+              md: `${String(RAIL_WIDTH)}px minmax(0, 1fr)`,
+              lg: `${String(RAIL_WIDTH)}px minmax(0, 1fr) minmax(360px, 0.85fr)`,
+            },
+            gap: 3,
           }}
         >
           {wideEnoughForRail && (
@@ -121,7 +158,22 @@ export function App(): ReactElement {
                 {data && `${formatCount(data.total)} listings found`}
                 {data && <Box component="span" aria-hidden> · {data.elapsedMs} ms</Box>}
               </Typography>
-              <SortSelect value={sort} onChange={(next) => { move(next, 1); }} />
+
+              <Stack direction="row" sx={{ gap: 1, alignItems: 'center' }}>
+                {!wideEnoughForMap && (
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={pane}
+                    onChange={(_, next: 'list' | 'map' | null) => { setPane(next ?? pane); }}
+                    aria-label="Result view"
+                  >
+                    <ToggleButton value="list" sx={{ textTransform: 'none' }}>List</ToggleButton>
+                    <ToggleButton value="map" sx={{ textTransform: 'none' }}>Map</ToggleButton>
+                  </ToggleButtonGroup>
+                )}
+                <SortSelect value={sort} onChange={(next) => { move(next, 1); }} />
+              </Stack>
             </Stack>
 
             {isError && (
@@ -130,25 +182,38 @@ export function App(): ReactElement {
               </Alert>
             )}
 
-            <ResultsList
-              data={data}
-              isPending={isPending}
-              isStale={isPlaceholderData}
-              onFirstPage={() => { move(sort, 1); }}
-            />
+            {mapVisible && !wideEnoughForMap
+              ? <Box sx={{ height: PANE_HEIGHT }}>{mapPane}</Box>
+              : (
+                <>
+                  <ResultsList
+                    data={data}
+                    isPending={isPending}
+                    isStale={isPlaceholderData}
+                    onFirstPage={() => { move(sort, 1); }}
+                    highlightedId={hoveredId ?? pinnedId}
+                    onHover={setHoveredId}
+                    scrollToId={pinnedId}
+                  />
 
-            {pages > 1 && (
-              <Stack sx={{ alignItems: 'center', mt: 4 }}>
-                <Pagination
-                  count={pages}
-                  page={page}
-                  onChange={(_, next) => { move(sort, next); }}
-                  color="primary"
-                  shape="rounded"
-                />
-              </Stack>
-            )}
+                  {pages > 1 && (
+                    <Stack sx={{ alignItems: 'center', mt: 4 }}>
+                      <Pagination
+                        count={pages}
+                        page={page}
+                        onChange={(_, next) => { move(sort, next); }}
+                        color="primary"
+                        shape="rounded"
+                      />
+                    </Stack>
+                  )}
+                </>
+              )}
           </Box>
+
+          {wideEnoughForMap && (
+            <Box sx={{ position: 'sticky', top: 96, height: PANE_HEIGHT }}>{mapPane}</Box>
+          )}
         </Box>
       </Container>
 
