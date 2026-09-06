@@ -106,6 +106,9 @@ internal static class Program
                 case "--dry-run":
                     overrides[$"{SeederOptions.SectionName}:{nameof(SeederOptions.DryRun)}"] = "true";
                     break;
+                case "--no-vectors":
+                    overrides[$"{SeederOptions.SectionName}:{nameof(SeederOptions.SkipEmbeddings)}"] = "true";
+                    break;
                 case "--help" or "-h":
                     PrintUsage();
                     return false;
@@ -121,5 +124,6 @@ internal static class Program
     }
 
     private static void PrintUsage() =>
-        Console.Error.WriteLine("usage: dotnet run --project src/Nestly.Seeder [--file <path>] [--count <n>] [--dry-run]");
+        Console.Error.WriteLine(
+            "usage: dotnet run --project src/Nestly.Seeder [--file <path>] [--count <n>] [--dry-run] [--no-vectors]");
 }

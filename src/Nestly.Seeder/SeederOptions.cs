@@ -27,4 +27,14 @@ internal sealed class SeederOptions
 
     /// <summary>Parse and report without touching Elasticsearch. Useful when only the cleaning is in question.</summary>
     public bool DryRun { get; init; }
+
+    /// <summary>
+    /// Index without description vectors, which takes seconds rather than a minute and a half.
+    /// </summary>
+    /// <remarks>
+    /// For iterating on the mapping or the cleaning, not for a demo: the index is valid but the
+    /// kNN leg of the hybrid search has nothing to match against, so search silently falls back
+    /// to lexical results only.
+    /// </remarks>
+    public bool SkipEmbeddings { get; init; }
 }

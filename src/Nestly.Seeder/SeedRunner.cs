@@ -4,9 +4,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nestly.Domain;
 using Nestly.Search.Configuration;
+using Nestly.Search.Embedding;
 using Nestly.Search.Indexing;
 using Nestly.Seeder.Cleaning;
 using Nestly.Seeder.Csv;
+using Nestly.Seeder.Embedding;
 
 namespace Nestly.Seeder;
 
@@ -21,27 +23,34 @@ internal sealed partial class SeedRunner
 {
     private readonly ElasticsearchClient _client;
     private readonly IListingIndexProvisioner _provisioner;
+    private readonly IListingEmbedder _embedder;
     private readonly ILogger<SeedRunner> _logger;
     private readonly SeederOptions _options;
     private readonly string _indexName;
     private readonly Uri _clusterUri;
+    private readonly int _embeddingBatchSize;
 
     public SeedRunner(
         ElasticsearchClient client,
         IListingIndexProvisioner provisioner,
+        IListingEmbedder embedder,
         IOptions<SeederOptions> options,
         IOptions<ElasticsearchOptions> elasticsearch,
+        IOptions<EmbeddingOptions> embedding,
         ILogger<SeedRunner> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(elasticsearch);
+        ArgumentNullException.ThrowIfNull(embedding);
 
         _client = client;
         _provisioner = provisioner;
+        _embedder = embedder;
         _logger = logger;
         _options = options.Value;
         _indexName = elasticsearch.Value.IndexName;
         _clusterUri = elasticsearch.Value.Uri;
+        _embeddingBatchSize = embedding.Value.BatchSize;
     }
 
     public async Task<int> RunAsync(CancellationToken cancellationToken)
@@ -63,13 +72,26 @@ internal sealed partial class SeedRunner
         var listings = source.Stream(path, _options.Limit);
         var stopwatch = Stopwatch.StartNew();
 
+        // The dry run never reaches the cluster, so there is nothing for a vector to be indexed
+        // into and no reason to spend a minute and a half producing them.
+        var vectorizer = _options.DryRun || _options.SkipEmbeddings
+            ? null
+            : new ListingVectorizer(_embedder, _embeddingBatchSize);
+
+        if (_options.SkipEmbeddings && !_options.DryRun)
+        {
+            LogSkippingEmbeddings();
+        }
+
+        var documents = vectorizer?.Apply(listings) ?? listings;
+
         int indexed;
 
         try
         {
             indexed = _options.DryRun
-                ? Parse(listings)
-                : await IndexAsync(listings, cancellationToken).ConfigureAwait(false);
+                ? Parse(documents)
+                : await IndexAsync(documents, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception failure) when (failure is not OperationCanceledException)
         {
@@ -99,6 +121,16 @@ internal sealed partial class SeedRunner
         }
 
         LogIndexed(indexed, source.Read, stopwatch.ElapsedMilliseconds, perSecond);
+
+        if (vectorizer is not null)
+        {
+            var embeddingMs = (long)vectorizer.Elapsed.TotalMilliseconds;
+            var embeddedPerSecond = (int)(vectorizer.Embedded / Math.Max(vectorizer.Elapsed.TotalSeconds, 0.001));
+
+            // Reported separately because it dominates the run and is the number worth quoting:
+            // the rest of the seed is parsing and bulk requests, which are comparatively free.
+            LogEmbedded(vectorizer.Embedded, _embedder.Dimensions, embeddingMs, embeddedPerSecond);
+        }
 
         // Ask the cluster what it actually holds rather than trusting the count kept while
         // sending. A bulk item can be rejected on the server for a reason the client shrugs at,
@@ -247,6 +279,16 @@ internal sealed partial class SeedRunner
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Indexed {Indexed} listings from {Rows} rows in {ElapsedMs} ms ({PerSecond}/s).")]
     private partial void LogIndexed(int indexed, int rows, long elapsedMs, int perSecond);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Embedded {Embedded} descriptions into {Dimensions}-dimension vectors in {ElapsedMs} ms ({PerSecond}/s).")]
+    private partial void LogEmbedded(int embedded, int dimensions, long elapsedMs, int perSecond);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Skipping embeddings: the index will have no description vectors and hybrid search will fall back to lexical only.")]
+    private partial void LogSkippingEmbeddings();
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Index {Index} now holds {Count} documents.")]
     private partial void LogClusterCount(long count, string index);
