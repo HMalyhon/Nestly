@@ -12,6 +12,15 @@ export const MAX_QUERY_LENGTH = 200;
 export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 20;
 
+/** Mirrors MaxFilterValues and MaxAmenities in ListingSearchRequestValidator. */
+const MAX_FILTER_VALUES = 50;
+const MAX_AMENITIES = 20;
+
+// The widths the API binds these to, not domain limits: past them System.Text.Json fails to
+// convert and the 400 carries a serializer diagnostic rather than a sentence anyone can act on.
+const MAX_RENT = 2_147_483_647;
+const MAX_BEDROOMS = 255;
+
 /** Manhattan and the inner boroughs at a glance, for a first visit with no bbox in the URL. */
 export const DEFAULT_VIEW = { center: [40.7255, -73.955] as [number, number], zoom: 12 };
 
@@ -63,6 +72,14 @@ export const DEFAULT_SEARCH: SearchState = {
 // Leaflet's own toBBoxString order, so the value round-trips through the map without reordering.
 const BBOX_PARTS = 4;
 
+function isLatitude(value: number): boolean {
+  return value >= -90 && value <= 90;
+}
+
+function isLongitude(value: number): boolean {
+  return value >= -180 && value <= 180;
+}
+
 function readBounds(value: string | null): GeoBounds | undefined {
   const parts = value?.split(',').map(Number) ?? [];
 
@@ -71,6 +88,12 @@ function readBounds(value: string | null): GeoBounds | undefined {
   }
 
   const [west, south, east, north] = parts as [number, number, number, number];
+
+  // The checks ListingSearchRequestValidator makes, so a hand-edited bbox falls back to no
+  // viewport instead of 400ing every request the link makes.
+  if (north < south || !isLatitude(north) || !isLatitude(south) || !isLongitude(west) || !isLongitude(east)) {
+    return undefined;
+  }
 
   return { topLat: north, leftLon: west, bottomLat: south, rightLon: east };
 }
@@ -85,18 +108,41 @@ function readSort(value: string | null): ListingSort {
   return SORT_OPTIONS.find((option) => option.value === value)?.value ?? DEFAULT_SEARCH.sort;
 }
 
+/** A whole number, or undefined when the parameter is not one. */
+// Digits only. Number() also reads hex, whitespace and exponent forms, so ?minRent=0x10 became a
+// $16 floor and ?minRent=1000.5 reached an int on the API, which rejects it rather than rounding.
+function readNumber(value: string | null): number | undefined {
+  return value !== null && /^\d+$/.test(value) && Number(value) <= Number.MAX_SAFE_INTEGER
+    ? Number(value)
+    : undefined;
+}
+
+/** The same, dropping anything too wide for the field the API binds it to. */
+// Dropped rather than clamped: a rent silently rewritten to two billion is not what was asked for.
+function readBounded(value: string | null, max: number): number | undefined {
+  const parsed = readNumber(value);
+
+  return parsed !== undefined && parsed <= max ? parsed : undefined;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 function readPage(value: string | null): number {
-  const page = Number(value);
+  const page = readNumber(value);
 
   // Clamped, not just validated: a hand-edited ?page=250 should show the last page the API will
   // serve rather than send a request it is certain to reject.
-  return Number.isInteger(page) ? Math.min(Math.max(page, 1), MAX_PAGE) : DEFAULT_SEARCH.page;
+  return page === undefined ? DEFAULT_SEARCH.page : clamp(page, 1, MAX_PAGE);
 }
 
-function readNumber(value: string | null): number | undefined {
-  const parsed = Number(value);
+function readZoom(value: string | null): number {
+  // Not `Number(z) || DEFAULT`: zoom 0 is falsy, so a map zoomed all the way out read back as 12
+  // and the URL disagreed with the grid it was describing.
+  const zoom = readNumber(value);
 
-  return value !== null && value !== '' && Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+  return zoom === undefined ? DEFAULT_VIEW.zoom : clamp(zoom, MIN_ZOOM, MAX_ZOOM);
 }
 
 function readFilters(params: URLSearchParams): ListingFilters {
@@ -105,14 +151,22 @@ function readFilters(params: URLSearchParams): ListingFilters {
   for (const [param, field] of Object.entries(LIST_FILTERS)) {
     // Repeated parameters rather than one comma-joined value: neighborhood and amenity names are
     // free text, and URLSearchParams already round-trips repeats without an escaping scheme.
-    const values = params.getAll(param);
+    const values = params
+      .getAll(param)
+      .filter((value) => value !== '')
+      .slice(0, param === 'amenity' ? MAX_AMENITIES : MAX_FILTER_VALUES);
 
     if (values.length > 0) {
       Object.assign(filters, { [field]: values });
     }
   }
 
-  const bedrooms = params.getAll('beds').map(Number).filter((value) => Number.isInteger(value) && value >= 0);
+  // Number('') is 0, which passed every guard here and turned a truncated ?beds= into a studio
+  // filter nobody asked for. readNumber rejects it with the rest of the coercions.
+  const bedrooms = params
+    .getAll('beds')
+    .flatMap((value) => readBounded(value, MAX_BEDROOMS) ?? [])
+    .slice(0, MAX_FILTER_VALUES);
 
   if (bedrooms.length > 0) {
     filters.bedrooms = bedrooms;
@@ -124,8 +178,14 @@ function readFilters(params: URLSearchParams): ListingFilters {
     filters.within = within;
   }
 
-  const minRent = readNumber(params.get('minRent'));
-  const maxRent = readNumber(params.get('maxRent'));
+  const minRent = readBounded(params.get('minRent'), MAX_RENT);
+  const maxRent = readBounded(params.get('maxRent'), MAX_RENT);
+
+  // An inverted range is not a range: the API rejects it, and there is no way to tell which of the
+  // two the reader meant, so neither is kept.
+  if (minRent !== undefined && maxRent !== undefined && minRent > maxRent) {
+    return filters;
+  }
 
   if (minRent !== undefined) {
     filters.minRent = minRent;
@@ -145,7 +205,7 @@ export function readSearchState(params: URLSearchParams): SearchState {
     sort: readSort(params.get('sort')),
     page: readPage(params.get('page')),
     filters: readFilters(params),
-    zoom: Math.min(Math.max(Number(params.get('z')) || DEFAULT_VIEW.zoom, MIN_ZOOM), MAX_ZOOM),
+    zoom: readZoom(params.get('z')),
   };
 }
 

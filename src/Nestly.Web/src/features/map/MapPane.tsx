@@ -2,7 +2,7 @@ import { Box, useTheme } from '@mui/material';
 import { useEffect, useRef } from 'react';
 import { CircleMarker, MapContainer, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import { formatCount, formatMoney } from '../../format';
-import { DEFAULT_VIEW } from '../search/searchState';
+import { DEFAULT_VIEW, MIN_ZOOM } from '../search/searchState';
 import type { GeoBounds, MapResponse } from '../../api/types';
 import type { LatLngBoundsExpression } from 'leaflet';
 import type { ReactElement } from 'react';
@@ -13,16 +13,25 @@ const PIN_RADIUS = 6;
 const CLUSTER_MIN_RADIUS = 11;
 const CLUSTER_MAX_RADIUS = 34;
 
-export type ViewChange = (bounds: GeoBounds, zoom: number) => void;
+/** Whether the user moved the map, or it is reporting the view it was built with. */
+export type ViewCause = 'mount' | 'pan';
+
+export type ViewChange = (bounds: GeoBounds, zoom: number, cause: ViewCause) => void;
+
+function clamp(value: number, limit: number): number {
+  return Math.min(Math.max(value, -limit), limit);
+}
 
 function toBounds(map: ReturnType<typeof useMap>): GeoBounds {
   const bounds = map.getBounds();
 
+  // Zoomed out far enough that the pane is wider than the world, Leaflet reports the overhang
+  // unwrapped -- a west of -190, which the API rejects and which the URL would then keep serving.
   return {
-    topLat: bounds.getNorth(),
-    leftLon: bounds.getWest(),
-    bottomLat: bounds.getSouth(),
-    rightLon: bounds.getEast(),
+    topLat: clamp(bounds.getNorth(), 90),
+    leftLon: clamp(bounds.getWest(), 180),
+    bottomLat: clamp(bounds.getSouth(), 90),
+    rightLon: clamp(bounds.getEast(), 180),
   };
 }
 
@@ -33,7 +42,7 @@ function ViewportReporter({ onChange }: { onChange: ViewChange }): null {
   // react-leaflet re-subscribes whenever the handlers object changes, which is every render, so
   // this closure is always the current one.
   const map = useMapEvents({
-    moveend: () => { onChange(toBounds(map), map.getZoom()); },
+    moveend: () => { onChange(toBounds(map), map.getZoom(), 'pan'); },
   });
 
   // Mount only, through a ref that is deliberately never updated: the first render's callback
@@ -44,7 +53,7 @@ function ViewportReporter({ onChange }: { onChange: ViewChange }): null {
   useEffect(() => {
     // Without this the list would show the whole city while the map shows one borough, until the
     // user happened to pan.
-    emitOnce.current(toBounds(map), map.getZoom());
+    emitOnce.current(toBounds(map), map.getZoom(), 'mount');
   }, [map]);
 
   return null;
@@ -94,6 +103,7 @@ export function MapPane({ data, initialBounds, onViewChange, highlightedId, onSe
       <MapContainer
         {...(bounds ? { bounds } : { center: DEFAULT_VIEW.center, zoom: DEFAULT_VIEW.zoom })}
         scrollWheelZoom
+        minZoom={MIN_ZOOM}
         style={{ height: '100%' }}
       >
         <TileLayer

@@ -36,22 +36,27 @@ export function FacetRail({ facets, filters, onChange }: FacetRailProps): ReactE
 
   const active = countFilters(filters);
 
-  // Rounded outward to whole steps so the handles can actually reach both ends.
-  const low = Math.floor((facets.minRent ?? 0) / RENT_STEP) * RENT_STEP;
-  const high = Math.ceil((facets.maxRent ?? low + RENT_STEP) / RENT_STEP) * RENT_STEP;
+  // Rounded outward to whole steps so the handles can actually reach both ends, and widened to
+  // contain the active filter: another filter lifting the cheapest listing above the floor the
+  // user set would otherwise put that floor off the track, where the next commit deletes it.
+  const low = Math.floor(Math.min(facets.minRent ?? 0, filters.minRent ?? Infinity) / RENT_STEP) * RENT_STEP;
+  const ceiling = Math.max(facets.maxRent ?? low + RENT_STEP, filters.maxRent ?? -Infinity);
+  const high = Math.ceil(ceiling / RENT_STEP) * RENT_STEP;
 
   const commitRent = ([min, max]: [number, number]): void => {
-    // A range back at the ends is no filter at all, and should leave no trace in the URL.
+    // A handle back at the end of the track is no filter at all, and should leave no trace in the
+    // URL. The second arm keeps a handle the user did not touch: another filter can lift the
+    // track's floor past a rent set earlier, and judging that rent by the new floor deleted it.
     const next: ListingFilters = { ...filters };
 
     delete next.minRent;
     delete next.maxRent;
 
-    if (min > low) {
+    if (min > low || min === filters.minRent) {
       next.minRent = min;
     }
 
-    if (max < high) {
+    if (max < high || max === filters.maxRent) {
       next.maxRent = max;
     }
 

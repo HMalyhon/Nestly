@@ -18,13 +18,26 @@ export function CheckboxFacet({ title, buckets, selected, onChange }: CheckboxFa
   // and it has no place in a shared link.
   const [expanded, setExpanded] = useState(false);
 
-  if (buckets.length === 0) {
+  // Elasticsearch omits a term the current filters exclude rather than returning it at zero, so a
+  // selected value can leave the response entirely. Listed from the selection, or it could be
+  // applied and counted in the badge with no checkbox left to clear it.
+  const missing = selected
+    .filter((key) => !buckets.some((bucket) => bucket.key === key))
+    .map((key) => ({ key, count: 0 }));
+  const listed = [...buckets, ...missing];
+
+  if (listed.length === 0) {
     return null;
   }
 
-  // A selected value whose count dropped to zero must still be listed, or it cannot be unselected.
-  const listed = buckets.filter((bucket) => bucket.count > 0 || selected.includes(bucket.key));
-  const visible = expanded ? listed : listed.slice(0, COLLAPSED_COUNT);
+  const visible = expanded
+    ? listed
+    : [
+      ...listed.slice(0, COLLAPSED_COUNT),
+      // A ticked box below the fold applies a filter the collapsed list does not show, and the
+      // rescued values above land at the end of the list precisely because they count zero.
+      ...listed.slice(COLLAPSED_COUNT).filter((bucket) => selected.includes(bucket.key)),
+    ];
 
   const toggle = (key: string): void => {
     onChange(selected.includes(key) ? selected.filter((value) => value !== key) : [...selected, key]);

@@ -19,6 +19,7 @@ import { formatCount } from './format';
 import { useDebounced } from './hooks/useDebounced';
 import { useUrlState } from './hooks/useUrlState';
 import type { GeoBounds, ListingFilters, ListingSort } from './api/types';
+import type { ViewCause } from './features/map/MapPane';
 import type { ReactElement } from 'react';
 
 const DEBOUNCE_MS = 200;
@@ -76,8 +77,12 @@ export function App(): ReactElement {
 
   // Replace, not push: a pan is a continuous gesture, and a history entry per frame of it would
   // make the back button useless.
-  const look = (within: GeoBounds, nextZoom: number): void => {
-    write({ filters: { ...filters, within }, zoom: nextZoom, page: 1 }, 'replace');
+  const look = (within: GeoBounds, nextZoom: number, cause: ViewCause): void => {
+    // A pan narrows the results, so the page you were on may no longer exist. The mount report is
+    // not a user action -- resetting on it discarded the page in every shared ?page=3 link.
+    const next = { filters: { ...filters, within }, zoom: nextZoom };
+
+    write(cause === 'pan' ? { ...next, page: 1 } : next, 'replace');
   };
 
   const pages = data ? pageCount(data.total) : 0;
