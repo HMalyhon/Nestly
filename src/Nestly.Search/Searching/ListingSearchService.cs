@@ -1,12 +1,16 @@
 using System.Diagnostics;
 using Elastic.Clients.Elasticsearch;
+using Elastic.Clients.Elasticsearch.Core.MSearch;
 using Elastic.Clients.Elasticsearch.Core.Search;
+using Elastic.Transport.Products.Elasticsearch;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nestly.Domain;
 using Nestly.Search.Configuration;
+using Nestly.Search.Embedding;
 using Nestly.Search.Indexing;
 using Nestly.Search.Querying;
+using Nestly.Search.Ranking;
 
 namespace Nestly.Search.Searching;
 
@@ -16,18 +20,33 @@ internal sealed partial class ListingSearchService : IListingSearchService
     private const int FragmentSize = 160;
     private const int FragmentCount = 2;
 
+    /// <summary>How deep each retrieval leg goes before the two are fused.</summary>
+    // Deep enough that a document ranked mid-table by one leg can still be lifted by the other,
+    // shallow enough that a keystroke does not ask the cluster for a thousand rows.
+    private const int FusionDepth = 100;
+
+    /// <summary>Ceiling on the lexical leg when a deep page is requested.</summary>
+    // Page 100 of 20 needs 2,000 ranked ids to slice from. Past the fused window the vector leg
+    // has nothing left to contribute, so those pages come out in lexical order -- which falls out
+    // of the arithmetic rather than needing a branch: a document present in one list scores
+    // 1/(k+rank), and that ordering is the lexical ordering.
+    private const int MaxRetrieval = 2_000;
+
     private readonly ElasticsearchClient _client;
+    private readonly IListingEmbedder _embedder;
     private readonly ILogger<ListingSearchService> _logger;
     private readonly string _indexName;
 
     public ListingSearchService(
         ElasticsearchClient client,
+        IListingEmbedder embedder,
         IOptions<ElasticsearchOptions> options,
         ILogger<ListingSearchService> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         _client = client;
+        _embedder = embedder;
         _logger = logger;
         _indexName = options.Value.IndexName;
     }
@@ -39,80 +58,30 @@ internal sealed partial class ListingSearchService : IListingSearchService
         ArgumentNullException.ThrowIfNull(request);
 
         var stopwatch = Stopwatch.StartNew();
-        var from = (request.Page - 1) * request.PageSize;
 
-        var response = await _client.SearchAsync<Listing>(
-            search =>
-            {
-                search
-                    .Indices(_indexName)
-                    .From(from)
-                    .Size(request.PageSize)
-                    .Query(ListingQueryBuilder.Build(request.Query, request.Filters))
-                    .Sort(ListingQueryBuilder.Sort(request.Sort, request.Filters.Near))
-
-                    // 384 floats per document, useless to a result card.
-                    .SourceExcludes(ListingFields.DescriptionVector)
-
-                    // Facets ride along on the same request: a second round trip to count what
-                    // this one already matched would double the latency the UI feels.
-                    .Aggregations(ListingFacetAggregations.Build(request.Query, request.Filters));
-
-                if (!string.IsNullOrWhiteSpace(request.Query))
-                {
-                    search.Highlight(Highlight());
-                }
-            },
-            cancellationToken).ConfigureAwait(false);
-
-        if (!response.IsValidResponse)
-        {
-            response.TryGetOriginalException(out var cause);
-
-            // DebugInformation holds the cluster address and the generated DSL. It belongs in the
-            // logs, not in an exception message that an error handler might render to a client.
-            LogFailure(response.DebugInformation);
-
-            var rejected = response.ApiCallDetails.HttpStatusCode is >= 400 and < 500;
-
-            throw new SearchException(
-                rejected ? "Elasticsearch rejected the search request." : "Elasticsearch is unavailable.",
-                rejected,
-                cause);
-        }
+        // Nothing to embed and nothing to fuse: a filters-only browse is one search and a sort.
+        var result = string.IsNullOrWhiteSpace(request.Query)
+            ? await BrowseAsync(request, cancellationToken).ConfigureAwait(false)
+            : await HybridAsync(request, cancellationToken).ConfigureAwait(false);
 
         stopwatch.Stop();
 
         return new ListingSearchResponse
         {
-            Total = response.Total,
-            Hits = [.. response.Hits.Select(hit => ToHit(hit, request.Filters.Near))],
-            Facets = FacetReader.Read(response.Aggregations),
+            Total = result.Total,
+            Hits = result.Hits,
+            Facets = result.Facets,
             ElapsedMs = stopwatch.ElapsedMilliseconds,
         };
     }
 
-    private static ListingHit ToHit(Hit<Listing> hit, GeoPoint? origin)
-    {
-        var listing = hit.Source!;
-
-        return new ListingHit
-        {
-            Listing = listing,
-            Score = hit.Score ?? 0,
-            Highlights = hit.Highlight?.GetValueOrDefault(ListingFields.Description) is { } fragments
-                ? [.. fragments]
-                : [],
-
-            // Lexical only until the vector leg lands.
-            MatchedBy = MatchSource.Lexical,
-
-            // Cheaper here than as a script field: the coordinates are already in the response.
-            DistanceKm = origin is { } from ? GeoDistance.Kilometers(from, listing.Location) : null,
-        };
-    }
-
-    private static Highlight Highlight() => new()
+    /// <summary>
+    /// Snippets for one page of results.
+    /// </summary>
+    // Applied when the page is hydrated, not when the legs retrieve: highlighting the hundred
+    // documents a leg ranks in order to show twenty costs 292 ms against 14 ms, and doing it here
+    // also covers the hits that only the vector leg found, which the lexical leg never saw.
+    private static Highlight Highlight(string? query) => new()
     {
         // Escapes the field text, so the only markup in a fragment is the highlighter's own
         // <em>. Without it a description containing markup would be handed to a browser intact.
@@ -125,6 +94,10 @@ internal sealed partial class ListingSearchService : IListingSearchService
                 FragmentSize = FragmentSize,
                 NumberOfFragments = FragmentCount,
 
+                // The page was chosen by id, so the highlighter is told separately what to look
+                // for -- without this it would find nothing to emphasise.
+                HighlightQuery = ListingQueryBuilder.HighlightText(query),
+
                 // Unified is the default; named because it is the one that handles phrase
                 // and fuzzy matches correctly, which the plain highlighter does not.
                 Type = HighlighterType.Unified,
@@ -132,6 +105,177 @@ internal sealed partial class ListingSearchService : IListingSearchService
         },
     };
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Elasticsearch did not answer the search: {Details}")]
-    private partial void LogFailure(string details);
+    private static IReadOnlyList<string> Ranking<T>(IReadOnlyCollection<Hit<T>> hits) =>
+        [.. hits.Select(hit => hit.Id).OfType<string>()];
+
+    private static IReadOnlyList<string> Fragments(IReadOnlyDictionary<string, IReadOnlyCollection<string>>? highlight) =>
+        highlight?.GetValueOrDefault(ListingFields.Description) is { } fragments ? [.. fragments] : [];
+
+    private static ListingHit ToHit(
+        Listing listing,
+        MatchSource matchedBy,
+        double score,
+        IReadOnlyList<string> highlights,
+        GeoPoint? origin) => new()
+        {
+            Listing = listing,
+            Score = score,
+            Highlights = highlights,
+            MatchedBy = matchedBy,
+
+            // Cheaper here than as a script field: the coordinates are already in the response.
+            DistanceKm = origin is { } from ? GeoDistance.Kilometers(from, listing.Location) : null,
+        };
+
+    /// <summary>Filters-only browse: one search, sorted, paged by Elasticsearch.</summary>
+    private async Task<SearchResult> BrowseAsync(ListingSearchRequest request, CancellationToken cancellationToken)
+    {
+        var from = (request.Page - 1) * request.PageSize;
+
+        var response = await _client.SearchAsync<Listing>(
+            search => search
+                .Indices(_indexName)
+                .From(from)
+                .Size(request.PageSize)
+                .Query(ListingQueryBuilder.Build(request.Query, request.Filters))
+                .Sort(ListingQueryBuilder.Sort(request.Sort, request.Filters.Near))
+
+                // 384 floats per document, useless to a result card.
+                .SourceExcludes(ListingFields.DescriptionVector)
+
+                // Facets ride along on the same request: a second round trip to count what this
+                // one already matched would double the latency the UI feels.
+                .Aggregations(ListingFacetAggregations.Build(request.Query, request.Filters)),
+            cancellationToken).ConfigureAwait(false);
+
+        Ensure(response, "browse");
+
+        return new SearchResult(
+            response.Total,
+            [.. response.Hits.Select(hit => ToHit(hit.Source!, MatchSource.Lexical, hit.Score ?? 0, [], request.Filters.Near))],
+            FacetReader.Read(response.Aggregations));
+    }
+
+    /// <summary>BM25 and kNN together, fused by rank, then the requested page hydrated.</summary>
+    // The two legs go out concurrently rather than as one _msearch: the 9.x client exposes no way
+    // to build msearch bodies, and hand-rolling the ndjson would be worse code than this for a
+    // saving of one round trip that Task.WhenAll already hides behind the slower leg.
+    private async Task<SearchResult> HybridAsync(ListingSearchRequest request, CancellationToken cancellationToken)
+    {
+        var from = (request.Page - 1) * request.PageSize;
+        var depth = Math.Clamp(from + request.PageSize, FusionDepth, MaxRetrieval);
+        var queryVector = _embedder.Embed(request.Query!);
+
+        var lexicalLeg = _client.SearchAsync<Listing>(
+            search => search
+                .Indices(_indexName)
+                .Query(ListingQueryBuilder.Build(request.Query, request.Filters))
+                .Size(depth)
+
+                // Ids and scores only. The documents for the one page that survives fusion are
+                // fetched afterwards, so nothing ships a hundred descriptions.
+                .Source(new SourceConfig(false))
+
+                // Facets ride on this leg: they describe what the filters and text match, which
+                // is exactly what the lexical query already had to compute.
+                .Aggregations(ListingFacetAggregations.Build(request.Query, request.Filters)),
+            cancellationToken);
+
+        var vectorLeg = _client.SearchAsync<Listing>(
+            search => search
+                .Indices(_indexName)
+                .Knn(ListingQueryBuilder.Knn(queryVector, request.Filters, FusionDepth, FusionDepth * 2))
+                .Size(FusionDepth)
+                .Source(new SourceConfig(false)),
+            cancellationToken);
+
+        await Task.WhenAll(lexicalLeg, vectorLeg).ConfigureAwait(false);
+
+        var lexical = await lexicalLeg.ConfigureAwait(false);
+        var vector = await vectorLeg.ConfigureAwait(false);
+
+        Ensure(lexical, "search");
+        Ensure(vector, "vector search");
+
+        var fused = RrfFusion.Fuse(Ranking(lexical.Hits), Ranking(vector.Hits));
+        var page = fused.Skip(from).Take(request.PageSize).ToArray();
+
+        var documents = await HydrateAsync(
+            [.. page.Select(hit => hit.Id)],
+            request.Query,
+            cancellationToken).ConfigureAwait(false);
+
+        return new SearchResult(
+            lexical.Total,
+            [
+                .. page
+                    .Where(hit => documents.ContainsKey(hit.Id))
+                    .Select(hit => ToHit(
+                        documents[hit.Id].Listing,
+                        hit.MatchedBy,
+                        hit.Score,
+                        documents[hit.Id].Highlights,
+                        request.Filters.Near)),
+            ],
+            FacetReader.Read(lexical.Aggregations));
+    }
+
+    /// <summary>Fetches the documents for one page of fused ids, in one round trip.</summary>
+    private async Task<Dictionary<string, Hydrated>> HydrateAsync(
+        IReadOnlyList<string> ids,
+        string? query,
+        CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var response = await _client.SearchAsync<Listing>(
+            search => search
+                .Indices(_indexName)
+                .Size(ids.Count)
+                .Query(ListingQueryBuilder.ByIds(ids))
+                .SourceExcludes(ListingFields.DescriptionVector)
+                .Highlight(Highlight(query)),
+            cancellationToken).ConfigureAwait(false);
+
+        Ensure(response, "hydrate");
+
+        // Keyed, not ordered: the order that matters is the fused one, applied by the caller.
+        return response.Hits
+            .Where(hit => hit.Source is not null)
+            .ToDictionary(
+                hit => hit.Source!.Id,
+                hit => new Hydrated(hit.Source!, Fragments(hit.Highlight)),
+                StringComparer.Ordinal);
+    }
+
+    private void Ensure(ElasticsearchResponse response, string what)
+    {
+        if (response.IsValidResponse)
+        {
+            return;
+        }
+
+        response.TryGetOriginalException(out var cause);
+
+        // DebugInformation holds the cluster address and the generated DSL. It belongs in the
+        // logs, not in an exception message that an error handler might render to a client.
+        LogFailure(what, response.DebugInformation);
+
+        var rejected = response.ApiCallDetails.HttpStatusCode is >= 400 and < 500;
+
+        throw new SearchException(
+            rejected ? $"Elasticsearch rejected the {what} request." : "Elasticsearch is unavailable.",
+            rejected,
+            cause);
+    }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Elasticsearch did not answer the {What}: {Details}")]
+    private partial void LogFailure(string what, string details);
+
+    private readonly record struct SearchResult(long Total, IReadOnlyList<ListingHit> Hits, ListingFacets Facets);
+
+    private readonly record struct Hydrated(Listing Listing, IReadOnlyList<string> Highlights);
 }

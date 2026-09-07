@@ -51,36 +51,65 @@ public static class ListingQueryBuilder
         };
     }
 
-    /// <summary>The free-text half of a search, or null when there is nothing to match.</summary>
-    public static Query? Text(string? query)
+    /// <summary>
+    /// The vector half of a hybrid search: approximate nearest neighbours over the description
+    /// embedding, constrained by the same filters as the lexical leg.
+    /// </summary>
+    /// <param name="queryVector">The embedded query, unit length like the indexed vectors.</param>
+    /// <param name="filters">Structured constraints, pushed into the kNN filter clause.</param>
+    /// <param name="k">Neighbours to return.</param>
+    /// <param name="candidates">Neighbours to examine per shard before returning k.</param>
+    public static KnnSearch Knn(float[] queryVector, ListingFilters filters, int k, int candidates)
     {
-        if (string.IsNullOrWhiteSpace(query))
+        var clauses = Filters(filters);
+
+        return new KnnSearch
         {
-            return null;
-        }
+            Field = ListingFields.DescriptionVector,
+            QueryVector = queryVector,
+            K = k,
 
-        return new MultiMatchQuery
-        {
-            Query = query,
-            Fields = Fields.FromStrings(TextFields),
+            // HNSW is approximate: it examines this many candidates per shard and keeps the best
+            // k. Below roughly 2k the recall drops off visibly for no meaningful saving.
+            NumCandidates = candidates,
 
-            // best_fields, not cross_fields: a query like "sunny studio" is looking for one
-            // field that says both, rather than a listing that scatters the words across three.
-            Type = TextQueryType.BestFields,
-
-            // One typo tolerated on longer words, so a mistyped "brooklin" still finds Brooklyn.
-            Fuzziness = new Fuzziness("AUTO"),
-
-            // Fuzzy matching only after the first two characters. Typos in an opening letter are
-            // rare, and without this every term walks a wide slice of the term dictionary --
-            // which is what made a long query take a second.
-            PrefixLength = 2,
+            // The same filters as the lexical leg, and not optional. Without them a vector hit
+            // can be a $30,000 Manhattan loft answering a search filtered to cheap Brooklyn
+            // studios -- semantically close, and exactly what the user excluded.
+            Filter = clauses.Count == 0 ? null : clauses,
         };
     }
 
     /// <summary>
-    /// The structured constraints, one query per dimension the caller actually set.
+    /// Fetches exactly these documents, for hydrating a page that fusion has already ordered.
     /// </summary>
+    // A terms query on the keyword id rather than the document _id: both work, and this one keeps
+    // the hydration expressible in the same typed DSL as everything else.
+    public static Query ByIds(IReadOnlyList<string> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        return new TermsQuery
+        {
+            Field = ListingFields.Id,
+            Terms = new TermsQueryField([.. ids.Select(FieldValue.String)]),
+        };
+    }
+
+    /// <summary>
+    /// The same fields without fuzziness, for highlighting.
+    /// </summary>
+    /// <remarks>
+    /// Re-running the fuzzy rewrite per highlighted document costs ten times what the search
+    /// itself does -- 149 ms against 14 ms over one page. A fuzzy match is by definition not the
+    /// word that was typed, so leaving it unemphasised is a defensible trade rather than only a
+    /// cheap one.
+    /// </remarks>
+    public static Query? HighlightText(string? query) => Text(query, fuzzy: false);
+
+    /// <summary>The free-text half of a search, or null when there is nothing to match.</summary>
+    public static Query? Text(string? query) => Text(query, fuzzy: true);
+
     public static IList<Query> Filters(ListingFilters filters, FilterDimension? excluding = null)
     {
         ArgumentNullException.ThrowIfNull(filters);
@@ -106,6 +135,35 @@ public static class ListingQueryBuilder
         _ => [],
     };
 
+    private static Query? Text(string? query, bool fuzzy)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return null;
+        }
+
+        return new MultiMatchQuery
+        {
+            Query = query,
+            Fields = Fields.FromStrings(TextFields),
+
+            // best_fields, not cross_fields: a query like "sunny studio" is looking for one
+            // field that says both, rather than a listing that scatters the words across three.
+            Type = TextQueryType.BestFields,
+
+            // One typo tolerated on longer words, so a mistyped "brooklin" still finds Brooklyn.
+            Fuzziness = fuzzy ? new Fuzziness("AUTO") : null,
+
+            // Fuzzy matching only after the first two characters. Typos in an opening letter are
+            // rare, and without this every term walks a wide slice of the term dictionary --
+            // which is what made a long query take a second.
+            PrefixLength = fuzzy ? 2 : null,
+        };
+    }
+
+    /// <summary>
+    /// The structured constraints, one query per dimension the caller actually set.
+    /// </summary>
     private static IEnumerable<(FilterDimension Dimension, Query Query)> FiltersByDimension(ListingFilters filters)
     {
         if (filters.MinRent is not null || filters.MaxRent is not null)
