@@ -1,4 +1,4 @@
-import { Box, useTheme } from '@mui/material';
+import { Alert, Box, useTheme } from '@mui/material';
 import { useEffect, useRef } from 'react';
 import { CircleMarker, MapContainer, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import { formatCount, formatMoney } from '../../format';
@@ -69,13 +69,18 @@ interface MapPaneProps {
   data: MapResponse | undefined;
   initialBounds: GeoBounds | undefined;
   onViewChange: ViewChange;
+  /** Why the markers are missing, when they are. */
+  error: string | undefined;
+
   /** The listing the cursor or a click is currently on, in either pane. */
   highlightedId: string | undefined;
 
   onSelect: (id: string) => void;
 }
 
-export function MapPane({ data, initialBounds, onViewChange, highlightedId, onSelect }: MapPaneProps): ReactElement {
+export function MapPane({
+  data, initialBounds, onViewChange, error, highlightedId, onSelect,
+}: MapPaneProps): ReactElement {
   const theme = useTheme();
 
   // Read once, on mount: MapContainer treats these as initial state, and the map owns its view
@@ -92,6 +97,7 @@ export function MapPane({ data, initialBounds, onViewChange, highlightedId, onSe
       sx={{
         height: '100%',
         minHeight: 320,
+        position: 'relative',
         borderRadius: 1,
         overflow: 'hidden',
         border: 1,
@@ -100,6 +106,17 @@ export function MapPane({ data, initialBounds, onViewChange, highlightedId, onSe
 
       }}
     >
+      {/* Over the map rather than in place of it: the tiles are still good, it is only the markers
+          that are missing, and saying so beats an empty city. */}
+      {error !== undefined && (
+        <Alert
+          severity="warning"
+          sx={{ position: 'absolute', top: 8, left: 8, right: 8, zIndex: 1000 }}
+        >
+          {error}
+        </Alert>
+      )}
+
       <MapContainer
         {...(bounds ? { bounds } : { center: DEFAULT_VIEW.center, zoom: DEFAULT_VIEW.zoom })}
         scrollWheelZoom

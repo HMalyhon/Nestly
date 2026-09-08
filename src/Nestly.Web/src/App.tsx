@@ -129,6 +129,10 @@ export function App(): ReactElement {
       data={map.data}
       initialBounds={filters.within}
       onViewChange={look}
+
+      // Read, not ignored: a failing map request used to leave the previous markers on screen, or
+      // an empty city, with nothing anywhere saying why.
+      error={map.isError ? map.error.message : undefined}
       highlightedId={hoveredId ?? pinnedId}
       onSelect={setPinnedId}
     />

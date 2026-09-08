@@ -8,6 +8,19 @@ import type { ReactElement } from 'react';
 
 const RENT_STEP = 250;
 
+// What the rail falls back to when there is no response to count with. The filters live in the
+// URL, not in the response, so a failed search still has to be undoable -- CheckboxFacet lists a
+// selected value the buckets do not carry, which is exactly this case.
+const NO_COUNTS: ListingFacets = {
+  boroughs: [],
+  neighborhoods: [],
+  bedrooms: [],
+  roomTypes: [],
+  propertyTypes: [],
+  amenities: [],
+  rentHistogram: [],
+};
+
 /** The facets that are bucket lists, as opposed to the min/max rent numbers alongside them. */
 type BucketFacet = {
   // -? because minRent and maxRent are optional, and an optional key would otherwise widen the
@@ -30,17 +43,21 @@ interface FacetRailProps {
 }
 
 export function FacetRail({ facets, filters, onChange }: FacetRailProps): ReactElement | null {
-  if (!facets) {
+  const active = countFilters(filters);
+
+  // Before the first response there is genuinely nothing to draw; after a failed one there is
+  // everything the user picked, and no other way to take it back.
+  if (!facets && active === 0) {
     return null;
   }
 
-  const active = countFilters(filters);
+  const counts = facets ?? NO_COUNTS;
 
   // Rounded outward to whole steps so the handles can actually reach both ends, and widened to
   // contain the active filter: another filter lifting the cheapest listing above the floor the
   // user set would otherwise put that floor off the track, where the next commit deletes it.
-  const low = Math.floor(Math.min(facets.minRent ?? 0, filters.minRent ?? Infinity) / RENT_STEP) * RENT_STEP;
-  const ceiling = Math.max(facets.maxRent ?? low + RENT_STEP, filters.maxRent ?? -Infinity);
+  const low = Math.floor(Math.min(counts.minRent ?? 0, filters.minRent ?? Infinity) / RENT_STEP) * RENT_STEP;
+  const ceiling = Math.max(counts.maxRent ?? low + RENT_STEP, filters.maxRent ?? -Infinity);
   const high = Math.ceil(ceiling / RENT_STEP) * RENT_STEP;
 
   const commitRent = ([min, max]: [number, number]): void => {
@@ -75,34 +92,46 @@ export function FacetRail({ facets, filters, onChange }: FacetRailProps): ReactE
         )}
       </Stack>
 
-      {high > low && (
-        <RentFacet
-          histogram={facets.rentHistogram}
-          bounds={[low, high]}
-          value={[filters.minRent ?? low, filters.maxRent ?? high]}
-          onCommit={commitRent}
-        />
+      {facets && high > low && (
+        <>
+          <RentFacet
+            histogram={counts.rentHistogram}
+            bounds={[low, high]}
+            value={[filters.minRent ?? low, filters.maxRent ?? high]}
+            onCommit={commitRent}
+          />
+
+          <Divider />
+        </>
       )}
 
-      <Divider />
-
       <BedroomsFacet
-        buckets={facets.bedrooms}
+        buckets={counts.bedrooms}
         selected={filters.bedrooms ?? []}
         onChange={(bedrooms) => { onChange({ ...filters, bedrooms }); }}
       />
 
-      {LISTS.map(({ param, title, facet }) => (
-        <Box key={param}>
-          <Divider sx={{ mb: 2 }} />
-          <CheckboxFacet
-            title={title}
-            buckets={facets[facet]}
-            selected={filters[LIST_FILTERS[param]] ?? []}
-            onChange={(values) => { onChange({ ...filters, [LIST_FILTERS[param]]: values }); }}
-          />
-        </Box>
-      ))}
+      {LISTS.map(({ param, title, facet }) => {
+        const selected = filters[LIST_FILTERS[param]] ?? [];
+
+        // Skipped whole, divider included: the facet decides for itself whether it has anything
+        // to show, and a rail of bare rules is what happens when only its contents are dropped.
+        if (counts[facet].length === 0 && selected.length === 0) {
+          return null;
+        }
+
+        return (
+          <Box key={param}>
+            <Divider sx={{ mb: 2 }} />
+            <CheckboxFacet
+              title={title}
+              buckets={counts[facet]}
+              selected={selected}
+              onChange={(values) => { onChange({ ...filters, [LIST_FILTERS[param]]: values }); }}
+            />
+          </Box>
+        );
+      })}
     </Stack>
   );
 }
