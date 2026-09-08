@@ -4,11 +4,13 @@ import {
   ToggleButtonGroup, Toolbar, Typography, useMediaQuery,
 } from '@mui/material';
 import { visuallyHidden } from '@mui/utils';
-import { useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { FacetRail } from './features/facets/FacetRail';
 import { MapPane } from './features/map/MapPane';
 import { useListingMap } from './features/map/useListingMap';
 import { ResultsList } from './features/results/ResultsList';
+import { useListing } from './features/results/useListing';
 import { SearchBar } from './features/search/SearchBar';
 import { SortSelect } from './features/search/SortSelect';
 import {
@@ -64,6 +66,7 @@ function describeResults(
 }
 
 export function App(): ReactElement {
+  const queryClient = useQueryClient();
   const [params, writeParams] = useUrlState();
   const state = readSearchState(params);
   const { query, sort, page, filters } = state;
@@ -80,7 +83,7 @@ export function App(): ReactElement {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pane, setPane] = useState<'list' | 'map'>('list');
   const [hoveredId, setHoveredId] = useState<string>();
-  const [pinnedId, setPinnedId] = useState<string>();
+  const [selectedId, setSelectedId] = useState<string>();
 
   const mapVisible = wideEnoughForMap || pane === 'map';
 
@@ -120,6 +123,23 @@ export function App(): ReactElement {
     write(cause === 'pan' ? { ...next, page: 1 } : next, 'replace');
   };
 
+  // Toggling, so clicking the same card or pin again clears it. Nothing else ever could: the
+  // selection had no off switch at all.
+  const select = (id: string | undefined): void => {
+    setSelectedId((current) => (current === id ? undefined : id));
+  };
+
+  // The search returns each listing in full, so the detail cache is filled from it rather than
+  // refetched: clicking a card costs nothing, and only a pin whose listing is off the current page
+  // reaches the server at all.
+  useEffect(() => {
+    for (const hit of data?.hits ?? []) {
+      queryClient.setQueryData(['listing', hit.listing.id], hit.listing);
+    }
+  }, [data, queryClient]);
+
+  const detail = useListing(selectedId);
+
   const pages = data ? pageCount(data.total) : 0;
   const activeFilters = countFilters(filters);
   const rail = <FacetRail facets={data?.facets} filters={filters} onChange={filter} />;
@@ -133,8 +153,11 @@ export function App(): ReactElement {
       // Read, not ignored: a failing map request used to leave the previous markers on screen, or
       // an empty city, with nothing anywhere saying why.
       error={map.isError ? map.error.message : undefined}
-      highlightedId={hoveredId ?? pinnedId}
-      onSelect={setPinnedId}
+      highlightedId={hoveredId ?? selectedId}
+      selected={detail.data}
+      selectedId={selectedId}
+      isLoadingSelected={detail.isPending && selectedId !== undefined}
+      onSelect={select}
     />
   );
 
@@ -280,9 +303,11 @@ export function App(): ReactElement {
                     isStale={isPlaceholderData}
                     onFirstPage={() => { move(sort, 1); }}
                     reducedMotion={reducedMotion}
-                    highlightedId={hoveredId ?? pinnedId}
+                    highlightedId={hoveredId ?? selectedId}
                     onHover={setHoveredId}
-                    scrollToId={pinnedId}
+                    selectedId={selectedId}
+                    onSelect={select}
+                    scrollToId={selectedId}
                   />
 
                   {pages > 1 && (

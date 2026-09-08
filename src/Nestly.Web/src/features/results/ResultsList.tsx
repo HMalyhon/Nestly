@@ -26,12 +26,18 @@ interface ResultsListProps {
 
   onHover: (id: string | undefined) => void;
 
+  /** The listing pinned on the map, set from either pane. */
+  selectedId: string | undefined;
+
+  onSelect: (id: string | undefined) => void;
+
   /** Set when the highlight came from the map, so the list should catch up to it. */
   scrollToId: string | undefined;
 }
 
 export function ResultsList({
-  data, isPending, isStale, onFirstPage, reducedMotion, highlightedId, onHover, scrollToId,
+  data, isPending, isStale, onFirstPage, reducedMotion, highlightedId, onHover, selectedId,
+  onSelect, scrollToId,
 }: ResultsListProps): ReactElement {
   const list = useRef<HTMLUListElement>(null);
 
@@ -95,7 +101,9 @@ export function ResultsList({
               key={hit.listing.id}
               hit={hit}
               isHighlighted={hit.listing.id === highlightedId}
+              isSelected={hit.listing.id === selectedId}
               onHover={onHover}
+              onSelect={onSelect}
             />
           ))}
       </Box>

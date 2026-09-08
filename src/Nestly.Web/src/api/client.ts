@@ -1,4 +1,4 @@
-import type { ListingMapRequest, ListingSearchRequest, ListingSearchResponse, MapResponse } from './types';
+import type { Listing, ListingMapRequest, ListingSearchRequest, ListingSearchResponse, MapResponse } from './types';
 
 // Relative by default, so the app calls its own origin: Vite proxies /api in dev, nginx does it
 // in Compose. Set VITE_API_BASE_URL only to point a local UI at an API somewhere else.
@@ -58,21 +58,20 @@ function rethrowIfCancelled(cause: unknown): void {
   }
 }
 
-// Every endpoint here is a POST with a JSON body, so the caller passes the body and its signal
-// rather than a RequestInit. Headers stay this function's business: HeadersInit also covers arrays
-// and Headers instances, neither of which merges into an object literal the way it looks like it does.
-async function request<T>(path: string, body: unknown, signal: AbortSignal): Promise<T> {
+// The caller passes a body and its signal rather than a RequestInit: no body means a GET. Headers
+// stay this function's business, because HeadersInit also covers arrays and Headers instances,
+// neither of which merges into an object literal the way it looks like it does.
+async function request<T>(path: string, signal: AbortSignal, body?: unknown): Promise<T> {
   let response: Response;
 
   try {
     response = await fetch(`${baseUrl}${path}`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-
       // React Query's signal cancels superseded requests; the timeout covers the case where the
       // API accepts the connection and then never answers, which nothing else here would catch.
       signal: AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]),
-      headers: { 'Content-Type': 'application/json' },
+      ...(body === undefined
+        ? { method: 'GET' }
+        : { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }),
     });
   } catch (cause) {
     rethrowIfCancelled(cause);
@@ -107,11 +106,17 @@ export function searchListings(
   body: ListingSearchRequest,
   signal: AbortSignal,
 ): Promise<ListingSearchResponse> {
-  return request('/api/listings/search', body, signal);
+  return request('/api/listings/search', signal, body);
+}
+
+// One listing in full, for a pin whose listing is not on the page of results being shown. The
+// twenty that are already carry the whole record, so this only fills the gap the map opens up.
+export function getListing(id: string, signal: AbortSignal): Promise<Listing> {
+  return request(`/api/listings/${encodeURIComponent(id)}`, signal);
 }
 
 // A separate call, not a slice of the search: panning must not re-transfer descriptions and
 // amenities for everything on screen.
 export function mapListings(body: ListingMapRequest, signal: AbortSignal): Promise<MapResponse> {
-  return request('/api/listings/map', body, signal);
+  return request('/api/listings/map', signal, body);
 }

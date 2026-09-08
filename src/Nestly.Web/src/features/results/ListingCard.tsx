@@ -2,7 +2,7 @@ import BedOutlinedIcon from '@mui/icons-material/BedOutlined';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import ShowerOutlinedIcon from '@mui/icons-material/ShowerOutlined';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
-import { Box, Card, CardContent, Chip, Stack, Typography } from '@mui/material';
+import { Box, Card, CardActionArea, CardContent, Chip, Stack, Typography } from '@mui/material';
 import { visuallyHidden } from '@mui/utils';
 import { formatBathrooms, formatBedrooms, formatMoney, truncate } from '../../format';
 import { HighlightedText } from './HighlightedText';
@@ -14,10 +14,14 @@ const SNIPPET_LENGTH = 180;
 interface ListingCardProps {
   hit: ListingHit;
   isHighlighted: boolean;
+  isSelected: boolean;
   onHover: (id: string | undefined) => void;
+  onSelect: (id: string | undefined) => void;
 }
 
-export function ListingCard({ hit, isHighlighted, onHover }: ListingCardProps): ReactElement {
+export function ListingCard({
+  hit, isHighlighted, isSelected, onHover, onSelect,
+}: ListingCardProps): ReactElement {
   const { listing } = hit;
 
   return (
@@ -35,7 +39,17 @@ export function ListingCard({ hit, isHighlighted, onHover }: ListingCardProps): 
         transition: 'box-shadow 120ms ease-out, border-color 120ms ease-out',
       }}
     >
-      <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, flexGrow: 1 }}>
+      {/* The card is the control: the only way to the map used to be hovering it, which no
+          keyboard can do, and the whole card is a bigger target than a "show on map" link. */}
+      <CardActionArea
+        onClick={() => { onSelect(listing.id); }}
+        onFocus={() => { onHover(listing.id); }}
+        onBlur={() => { onHover(undefined); }}
+        aria-pressed={isSelected}
+        aria-label={`Show ${listing.title} on the map`}
+        sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
+      >
+        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, flexGrow: 1, width: '100%' }}>
         <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
           <Box>
             <Typography variant="subtitle1" component="h2" sx={{ lineHeight: 1.3 }}>
@@ -92,7 +106,8 @@ export function ListingCard({ hit, isHighlighted, onHover }: ListingCardProps): 
         <Typography variant="caption" sx={{ color: 'text.secondary', mt: 'auto' }}>
           {listing.roomType} · {formatMoney(listing.pricePerNight)}/night
         </Typography>
-      </CardContent>
+        </CardContent>
+      </CardActionArea>
     </Card>
   );
 }
