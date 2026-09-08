@@ -67,8 +67,11 @@ export function RentFacet({ histogram, bounds, value, onCommit }: RentFacetProps
         min={min}
         max={max}
         step={STEP}
-        aria-labelledby="rent-facet"
+
+        // No aria-labelledby beside these: MUI puts both on the same hidden input, where the
+        // labelledby wins and both thumbs announce "Monthly rent".
         getAriaLabel={(index) => (index === 0 ? 'Minimum rent' : 'Maximum rent')}
+        getAriaValueText={(rent) => formatMoney(rent)}
         valueLabelDisplay="off"
         onChange={(_, next) => { setDraft(next as Range); }}
 

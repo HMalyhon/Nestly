@@ -15,10 +15,10 @@ import {
   countFilters, pageCount, readSearchState, toMapRequest, toRequest, writeSearchState,
 } from './features/search/searchState';
 import { useListingSearch } from './features/search/useListingSearch';
-import { formatCount } from './format';
+import { formatCount, formatListings } from './format';
 import { useDebounced } from './hooks/useDebounced';
 import { useUrlState } from './hooks/useUrlState';
-import type { GeoBounds, ListingFilters, ListingSort } from './api/types';
+import type { GeoBounds, ListingFilters, ListingSearchResponse, ListingSort } from './api/types';
 import type { ViewCause } from './features/map/MapPane';
 import type { ReactElement } from 'react';
 
@@ -27,6 +27,41 @@ const RAIL_WIDTH = 272;
 
 /** Sticky panes stop below the app bar and leave the page margin visible. */
 const PANE_HEIGHT = 'calc(100vh - 148px)';
+
+/**
+ * What the live region says.
+ */
+// The visible count cannot carry it: "396 listings found" is identical from one page to the next,
+// so a page turn mutated nothing and a screen reader announced nothing.
+function describeResults(
+  isPending: boolean,
+  isError: boolean,
+  data: ListingSearchResponse | undefined,
+  page: number,
+  pages: number,
+): string {
+  if (isPending) {
+    return 'Searching…';
+  }
+
+  if (isError) {
+    return 'The search failed.';
+  }
+
+  if (!data) {
+    return '';
+  }
+
+  if (data.total === 0) {
+    return 'Nothing matched that search.';
+  }
+
+  if (data.hits.length === 0) {
+    return `Page ${String(page)} is past the end of ${formatCount(data.total)} results.`;
+  }
+
+  return `${formatListings(data.total)} found. Page ${String(page)} of ${String(pages)}.`;
+}
 
 export function App(): ReactElement {
   const [params, writeParams] = useUrlState();
@@ -37,7 +72,7 @@ export function App(): ReactElement {
   // state to keep in step and the back button needs no special case. Only the request is debounced.
   const settled = useDebounced(query, DEBOUNCE_MS);
 
-  const heading = useRef<HTMLHeadingElement>(null);
+  const results = useRef<HTMLHeadingElement>(null);
   const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
   const wideEnoughForRail = useMediaQuery((theme) => theme.breakpoints.up('md'));
   const wideEnoughForMap = useMediaQuery((theme) => theme.breakpoints.up('lg'));
@@ -63,7 +98,7 @@ export function App(): ReactElement {
   const jumpToTop = (): void => {
     // Focus, not just scroll: paging with the keyboard would otherwise leave the focus ring on a
     // button that scrolling has pushed off-screen, with nothing announcing the new results.
-    heading.current?.focus({ preventScroll: true });
+    results.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
   };
 
@@ -99,8 +134,38 @@ export function App(): ReactElement {
     />
   );
 
+  const status = describeResults(isPending, isError, data, page, pages);
+
   return (
     <>
+      {/* Sighted keyboard users have no other way past the rail: the facets are 30-odd tab stops
+          between the search box and the results. */}
+      <Box
+        component="a"
+        href="#results"
+        sx={{
+          ...visuallyHidden,
+          '&:focus': {
+            clip: 'auto',
+            clipPath: 'none',
+            position: 'fixed',
+            top: 8,
+            left: 8,
+            zIndex: 'tooltip',
+            width: 'auto',
+            height: 'auto',
+            overflow: 'visible',
+            p: 1.5,
+            borderRadius: 1,
+            bgcolor: 'background.paper',
+            boxShadow: 3,
+            color: 'primary.main',
+          },
+        }}
+      >
+        Skip to results
+      </Box>
+
       <AppBar position="sticky" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Container maxWidth={false}>
           <Toolbar disableGutters sx={{ gap: 2, py: 1.5, flexWrap: 'wrap' }}>
@@ -120,6 +185,10 @@ export function App(): ReactElement {
                   </Badge>
                 }
                 onClick={() => { setDrawerOpen(true); }}
+
+                // The badge is aria-hidden, so without this the button is announced as bare
+                // "Filters" and the count of what is applied never reaches a screen reader.
+                aria-label={activeFilters > 0 ? `Filters, ${String(activeFilters)} applied` : 'Filters'}
               >
                 Filters
               </Button>
@@ -129,9 +198,11 @@ export function App(): ReactElement {
       </AppBar>
 
       <Container component="main" maxWidth={false} sx={{ py: 3 }}>
-        <Typography component="h1" ref={heading} tabIndex={-1} sx={visuallyHidden}>
+        <Typography component="h1" sx={visuallyHidden}>
           Apartment search
         </Typography>
+
+        <Box aria-live="polite" aria-atomic sx={visuallyHidden}>{status}</Box>
 
         <Box
           sx={{
@@ -155,12 +226,20 @@ export function App(): ReactElement {
               direction="row"
               sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}
             >
-              {/* Polite, not assertive: the count changes on every keystroke and should be read
-                  when the screen reader next pauses, not over what the user is typing. The timing
-                  is for the demo and is not worth reading out at all. */}
-              <Typography variant="body2" aria-live="polite" aria-atomic sx={{ color: 'text.secondary' }}>
+              {/* The results region's heading, and the focus target for paging and sorting. It is
+                  visible, unlike the clipped h1 that used to take focus: a focus ring on a 1px
+                  element is one nobody can see, and it sat above the rail, so the next Tab went
+                  backwards into the filters instead of on to the results. */}
+              <Typography
+                variant="body2"
+                component="h2"
+                id="results"
+                ref={results}
+                tabIndex={-1}
+                sx={{ color: 'text.secondary' }}
+              >
                 {isPending && 'Searching…'}
-                {data && `${formatCount(data.total)} listings found`}
+                {data && `${formatListings(data.total)} found`}
                 {data && <Box component="span" aria-hidden> · {data.elapsedMs} ms</Box>}
               </Typography>
 
@@ -196,6 +275,7 @@ export function App(): ReactElement {
                     isPending={isPending}
                     isStale={isPlaceholderData}
                     onFirstPage={() => { move(sort, 1); }}
+                    reducedMotion={reducedMotion}
                     highlightedId={hoveredId ?? pinnedId}
                     onHover={setHoveredId}
                     scrollToId={pinnedId}
@@ -225,7 +305,9 @@ export function App(): ReactElement {
       <Drawer
         open={drawerOpen && !wideEnoughForRail}
         onClose={() => { setDrawerOpen(false); }}
-        slotProps={{ paper: { sx: { width: RAIL_WIDTH + 48, p: 2 } } }}
+        // Announced as a bare "dialog" otherwise: the role and aria-modal are on the paper slot,
+        // and the name has to go with them.
+        slotProps={{ paper: { 'aria-label': 'Filters', sx: { width: RAIL_WIDTH + 48, p: 2 } } }}
       >
         {rail}
       </Drawer>

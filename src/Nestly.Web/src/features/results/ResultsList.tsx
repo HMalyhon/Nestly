@@ -1,4 +1,4 @@
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Button, LinearProgress, Stack, Typography } from '@mui/material';
 import { useEffect, useRef } from 'react';
 import { formatCount } from '../../format';
 import { ListingCard } from './ListingCard';
@@ -19,6 +19,8 @@ interface ResultsListProps {
 
   onFirstPage: () => void;
 
+  reducedMotion: boolean;
+
   /** The listing the cursor or a map click is on. */
   highlightedId: string | undefined;
 
@@ -29,7 +31,7 @@ interface ResultsListProps {
 }
 
 export function ResultsList({
-  data, isPending, isStale, onFirstPage, highlightedId, onHover, scrollToId,
+  data, isPending, isStale, onFirstPage, reducedMotion, highlightedId, onHover, scrollToId,
 }: ResultsListProps): ReactElement {
   const list = useRef<HTMLUListElement>(null);
 
@@ -41,20 +43,36 @@ export function ResultsList({
     }
 
     list.current
-      ?.querySelector(`[data-listing="${scrollToId}"]`)
-      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [scrollToId]);
+      // Escaped: an id with a quote in it would be a SyntaxError thrown inside an effect, which
+      // with no error boundary above takes the whole tree down.
+      ?.querySelector(`[data-listing="${CSS.escape(scrollToId)}"]`)
+      ?.scrollIntoView({ block: 'nearest', behavior: reducedMotion ? 'auto' : 'smooth' });
+  }, [scrollToId, reducedMotion]);
 
   // Two different empty screens, and conflating them is how a paging bug reads as "no results".
   const noMatches = data?.total === 0;
   const pastTheEnd = data !== undefined && data.total > 0 && data.hits.length === 0;
 
+  const busy = isPending || isStale;
+
   return (
     <>
+      {/* The only signal that a search is in flight once results are on screen. Dimming them was
+          the old one, and no opacity that reads as dimmed keeps body text above 4.5:1. */}
+      <LinearProgress
+        aria-hidden
+        sx={{ height: 2, mb: '-2px', visibility: busy ? 'visible' : 'hidden', borderRadius: 1 }}
+      />
+
       <Box
         component="ul"
         ref={list}
         aria-label="Listings"
+
+        // list-style: none drops list semantics in Safari, so VoiceOver stops announcing "list,
+        // 20 items" and the position of each one -- which is the whole point of a results page.
+        role="list"
+        aria-busy={busy}
         sx={{
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
@@ -63,9 +81,10 @@ export function ResultsList({
           m: 0,
           p: 0,
 
-          // These are the previous search's results while the next one is in flight; saying so
-          // beats presenting stale cards as current.
-          opacity: isStale ? 0.55 : 1,
+          // These are the previous search's results while the next one is in flight. Only a
+          // slight fade, with the progress bar above carrying the signal: at the 0.55 this used to
+          // be, snippet text fell to 2.45:1.
+          opacity: isStale ? 0.9 : 1,
           transition: 'opacity 120ms ease-out',
         }}
       >

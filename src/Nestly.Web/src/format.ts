@@ -10,6 +10,11 @@ export const formatMoney = (value: number): string => money.format(value);
 
 export const formatCount = (value: number): string => count.format(value);
 
+/** The count with its noun agreeing, so a single result does not read "1 listings". */
+export function formatListings(total: number): string {
+  return `${formatCount(total)} ${total === 1 ? 'listing' : 'listings'}`;
+}
+
 export function formatBedrooms(bedrooms: number): string {
   if (bedrooms === 0) {
     return 'Studio';

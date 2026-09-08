@@ -3,6 +3,7 @@ import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import ShowerOutlinedIcon from '@mui/icons-material/ShowerOutlined';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import { Box, Card, CardContent, Chip, Stack, Typography } from '@mui/material';
+import { visuallyHidden } from '@mui/utils';
 import { formatBathrooms, formatBedrooms, formatMoney, truncate } from '../../format';
 import { HighlightedText } from './HighlightedText';
 import type { ListingHit } from '../../api/types';
@@ -60,7 +61,18 @@ export function ListingCard({ hit, isHighlighted, onHover }: ListingCardProps): 
           <Chip icon={<ShowerOutlinedIcon />} label={formatBathrooms(listing.bathrooms)} variant="outlined" />
           <Chip icon={<GroupOutlinedIcon />} label={`Sleeps ${String(listing.accommodates)}`} variant="outlined" />
           {listing.reviewScore !== undefined && (
-            <Chip icon={<StarRoundedIcon />} label={listing.reviewScore.toFixed(2)} variant="outlined" />
+            <Chip
+              icon={<StarRoundedIcon />}
+              variant="outlined"
+
+              // The star is aria-hidden like every MUI icon, so the chip read as a bare "4.87".
+              label={(
+                <>
+                  {listing.reviewScore.toFixed(2)}
+                  <Box component="span" sx={visuallyHidden}> out of 5, average review score</Box>
+                </>
+              )}
+            />
           )}
         </Stack>
 

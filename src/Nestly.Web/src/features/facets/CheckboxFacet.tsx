@@ -72,7 +72,12 @@ export function CheckboxFacet({ title, buckets, selected, onChange }: CheckboxFa
       ))}
 
       {listed.length > COLLAPSED_COUNT && (
-        <Button size="small" onClick={() => { setExpanded(!expanded); }} sx={{ mt: 0.5 }}>
+        <Button
+          size="small"
+          aria-expanded={expanded}
+          onClick={() => { setExpanded(!expanded); }}
+          sx={{ mt: 0.5 }}
+        >
           {expanded ? 'Show fewer' : `Show all ${String(listed.length)}`}
         </Button>
       )}
