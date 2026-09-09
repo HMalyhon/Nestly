@@ -50,6 +50,10 @@
     -->
     <PackageVersion Include="xunit.v3" Version="4.0.0" />
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0" />
+
+    <!-- The integration tests run against a real Elasticsearch 9.2.0, started per run. A stub
+         would only prove the stub agrees with itself about aggregations and kNN. -->
+    <PackageVersion Include="Testcontainers.Elasticsearch" Version="4.15.0" />
   </ItemGroup>
 
   <ItemGroup Label="Analyzers">

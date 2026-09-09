@@ -6,6 +6,7 @@
     <Project Path="src/Nestly.Seeder/Nestly.Seeder.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Nestly.IntegrationTests/Nestly.IntegrationTests.csproj" />
     <Project Path="tests/Nestly.UnitTests/Nestly.UnitTests.csproj" />
   </Folder>
   <Folder Name="/tools/">

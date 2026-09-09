@@ -24,6 +24,7 @@
        should not force them public. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Nestly.UnitTests" />
+    <InternalsVisibleTo Include="Nestly.IntegrationTests" />
   </ItemGroup>
 
 </Project>
