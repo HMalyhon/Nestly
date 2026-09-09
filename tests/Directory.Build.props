@@ -1,0 +1,20 @@
+<Project>
+
+  <!-- Everything the solution enforces still applies here; this only lifts the rules that are
+       about published API surface rather than correctness. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+
+    <!--
+      SA1600/SA1602: a test's name is its documentation, and an XML comment on every fact would
+      say the name again in longer words.
+      CA1707: Method_Condition_Result underscores are the convention that makes a failing test
+      readable in CI output.
+      CA1861: InlineData arrays are attribute arguments; they cannot be hoisted to a field.
+    -->
+    <NoWarn>$(NoWarn);SA1600;SA1602;CA1707;CA1861</NoWarn>
+  </PropertyGroup>
+
+</Project>

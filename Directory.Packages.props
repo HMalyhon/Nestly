@@ -42,6 +42,16 @@
     <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Testing">
+    <!--
+      xunit.v3 rather than the v2 line the template still scaffolds: v3 runs on
+      Microsoft.Testing.Platform, which is the only runner the .NET 10 SDK supports. It needs
+      neither Microsoft.NET.Test.Sdk nor a VSTest adapter; see dotnet.config.
+    -->
+    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Analyzers">
     <!--
       1.1.118 is the newest stable, but it was released before C# 9 and misreports on

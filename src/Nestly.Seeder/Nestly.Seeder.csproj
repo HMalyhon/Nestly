@@ -20,4 +20,10 @@
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- The cleaning and validation rules are internal on purpose; the tests that pin them down
+       should not force them public. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Nestly.UnitTests" />
+  </ItemGroup>
+
 </Project>
