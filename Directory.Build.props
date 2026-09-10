@@ -11,6 +11,22 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
 
+    <!--
+      Audit transitive packages too, not just the ones declared here: a vulnerability almost never
+      arrives in a package this repo names directly.
+    -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+
+    <!--
+      The one class of warning that is not allowed to fail the build. NU1901-NU1904 are advisories
+      published against packages, so treating them as errors means an advisory filed overnight
+      breaks a build whose code nobody has touched. It should report, loudly, and let someone
+      decide; a red build for a reason no commit caused is a red build people learn to ignore.
+    -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>

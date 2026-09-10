@@ -1,0 +1,12 @@
+# LF in the repository whatever the checkout platform does locally. Without this a Windows clone
+# commits CRLF into the shell scripts and Dockerfiles, and the images stop building.
+* text=auto eol=lf
+
+# Never touched: the dataset is the committed artefact the seeder reads, and normalising bytes
+# inside a gzip stream corrupts it.
+*.gz binary
+*.onnx binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
