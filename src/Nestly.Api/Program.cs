@@ -3,7 +3,14 @@ using Nestly.Api.Infrastructure;
 using Nestly.Search;
 using Scalar.AspNetCore;
 
-var builder = WebApplication.CreateBuilder(args);
+// ContentRootPath rather than the default, which is the working directory: launched from
+// anywhere but its own folder the app finds no appsettings.json, binds an empty Embedding section
+// and fails validation at startup complaining about a field the file plainly sets.
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory,
+});
 
 builder.Services.AddNestlySearch(builder.Configuration);
 

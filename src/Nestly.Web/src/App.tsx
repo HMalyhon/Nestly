@@ -5,9 +5,8 @@ import {
 } from '@mui/material';
 import { visuallyHidden } from '@mui/utils';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { FacetRail } from './features/facets/FacetRail';
-import { MapPane } from './features/map/MapPane';
 import { useListingMap } from './features/map/useListingMap';
 import { ResultsList } from './features/results/ResultsList';
 import { useListing } from './features/results/useListing';
@@ -23,6 +22,10 @@ import { useUrlState } from './hooks/useUrlState';
 import type { GeoBounds, ListingFilters, ListingSearchResponse, ListingSort } from './api/types';
 import type { ViewCause } from './features/map/MapPane';
 import type { ReactElement } from 'react';
+
+// Split out of the initial bundle: Leaflet and its CSS are a third of the download, and below the
+// lg breakpoint the map is not rendered at all until the user asks for it.
+const MapPane = lazy(async () => ({ default: (await import('./features/map/MapPane')).MapPane }));
 
 const DEBOUNCE_MS = 200;
 const RAIL_WIDTH = 272;
@@ -145,20 +148,22 @@ export function App(): ReactElement {
   const rail = <FacetRail facets={data?.facets} filters={filters} onChange={filter} />;
 
   const mapPane = (
-    <MapPane
-      data={map.data}
-      initialBounds={filters.within}
-      onViewChange={look}
+    <Suspense fallback={<Box sx={{ height: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />}>
+      <MapPane
+        data={map.data}
+        initialBounds={filters.within}
+        onViewChange={look}
 
-      // Read, not ignored: a failing map request used to leave the previous markers on screen, or
-      // an empty city, with nothing anywhere saying why.
-      error={map.isError ? map.error.message : undefined}
-      highlightedId={hoveredId ?? selectedId}
-      selected={detail.data}
-      selectedId={selectedId}
-      isLoadingSelected={detail.isPending && selectedId !== undefined}
-      onSelect={select}
-    />
+        // Read, not ignored: a failing map request used to leave the previous markers on screen,
+        // or an empty city, with nothing anywhere saying why.
+        error={map.isError ? map.error.message : undefined}
+        highlightedId={hoveredId ?? selectedId}
+        selected={detail.data}
+        selectedId={selectedId}
+        isLoadingSelected={detail.isPending && selectedId !== undefined}
+        onSelect={select}
+      />
+    </Suspense>
   );
 
   const status = describeResults(isPending, isError, data, page, pages);

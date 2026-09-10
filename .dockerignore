@@ -1,0 +1,15 @@
+# Build output, never an input.
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/TestResults/
+
+# Fetched during the image build and verified against its digest there.
+models/
+
+.git/
+.github/
+.vs/
+.vscode/
+**/*.user

@@ -45,5 +45,64 @@ services:
       retries: 12
       start_period: 30s
 
+  api:
+    image: nestly-api
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: nestly-api
+    environment:
+      - Elasticsearch__Uri=http://elasticsearch:9200
+
+      # nginx forwards /api on the app's own origin, so the browser never makes a cross-origin
+      # request and no origin needs allowing. The list stays for `npm run dev`, which does.
+      - Cors__AllowedOrigins__0=http://localhost:8080
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      # 8080 inside, which is what the aspnet images already default to; 5080 outside, so the web
+      # tier can have 8080 on the host without the two contending for it.
+      - "5080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  seeder:
+    image: nestly-api
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: nestly-seeder
+
+    # The same image as the API with a different entrypoint: both need the 90 MB model, and a
+    # second image would only carry a second copy of it.
+    working_dir: /app/seeder
+    entrypoint: ["dotnet", "Nestly.Seeder.dll"]
+    environment:
+      - Elasticsearch__Uri=http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+    # Runs once and stops. Without this Compose would treat the exit as a crash and start it
+    # again, re-indexing the whole dataset every time.
+    restart: "no"
+
+  web:
+    image: nestly-web
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    container_name: nestly-web
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
 volumes:
   elasticsearch-data:

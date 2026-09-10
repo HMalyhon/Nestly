@@ -8,10 +8,27 @@ export default defineConfig(({ command }) => {
   // rules with the compiler switched off would be half the deal.
   const plugins = [react({ compiler: true })];
 
+  // Split by how often each part changes, not to make the first load smaller -- every one of
+  // these is needed to paint, so the bytes are the same either way. React and MUI change when a
+  // dependency is upgraded; the app changes every commit, and without this each commit would
+  // invalidate all 500 kB of them in every returning visitor's cache.
+  const build = {
+    rolldownOptions: {
+      output: {
+        advancedChunks: {
+          groups: [
+            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
+            { name: 'mui', test: /node_modules[\\/](@mui|@emotion)[\\/]/ },
+          ],
+        },
+      },
+    },
+  };
+
   // Only a local server proxies. A production build is served by nginx, which does the same
   // forwarding, so `vite build` must not need the variable at all.
   if (command !== 'serve') {
-    return { plugins };
+    return { plugins, build };
   }
 
   // Read against this file, not the cwd, so `vite` started from the repo root still finds it --
@@ -29,5 +46,5 @@ export default defineConfig(({ command }) => {
   // through nginx. One code path, and no CORS preflight in either.
   const proxy = { '/api': { target, changeOrigin: true } };
 
-  return { plugins, server: { port: 5173, proxy }, preview: { port: 4173, proxy } };
+  return { plugins, build, server: { port: 5173, proxy }, preview: { port: 4173, proxy } };
 });
