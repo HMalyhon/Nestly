@@ -27,7 +27,7 @@ public sealed record Listing
 
     /// <summary>
     /// Derived from <see cref="PricePerNight"/>. The source is short-term rental data, so there
-    /// is no real monthly rent to read; this is the only fabricated value in the index and the
+    /// is no real monthly rent to read; this is the only value the pipeline derives and the
     /// README says so plainly.
     /// </summary>
     public required int MonthlyRent { get; init; }

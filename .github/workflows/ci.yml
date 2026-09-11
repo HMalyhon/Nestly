@@ -28,7 +28,7 @@ jobs:
           global-json-file: global.json
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('Directory.Packages.props') }}
@@ -45,7 +45,7 @@ jobs:
       # Keyed on the digests rather than a version, because the digests are what the fetcher
       # verifies: change one and the cache misses, which is exactly when it should.
       - name: Cache the embedding model
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: models
           key: model-${{ hashFiles('tools/Nestly.ModelFetcher/appsettings.json') }}
@@ -87,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # The build is the test: the API image publishes with analysers on and downloads the model
       # against its recorded digest, and the web image runs the same lint and typecheck as above.

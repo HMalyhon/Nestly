@@ -67,8 +67,9 @@ Everything indexed comes from the source as published, with a single exception:
 
 Inside Airbnb is short-term rental data, priced per night; there is no monthly rent in the
 source to read. Nestly presents itself as an apartment finder, so a monthly figure is derived.
-It is flagged in the domain model, called out in the project README, and is the only fabricated
-value in the index.
+It is flagged in the domain model, called out in the project README, and is the only value the
+pipeline derives. The one other substitution is a missing `minimum_nights` falling back to 1,
+which affects two of the 5,000 committed rows.
 
 Be aware this yields higher numbers than real NYC long-term rents — the median works out around
 $6,500/month, because nightly short-let rates bake in turnover, cleaning and margin. A smaller
@@ -77,7 +78,8 @@ which is worse than an obvious ×30. Treat the rents as demo data, not market da
 
 ## Not fabricated
 
-For the avoidance of doubt, the project does **not** invent square footage, no-fee status, or
-listing dates, despite all three being natural facets for an apartment search. The source has no
-such fields, and presenting invented values alongside real ones is the kind of thing a reviewer
-is right to distrust. Facets use only what the data genuinely contains.
+For the avoidance of doubt, the project does **not** invent square footage or no-fee status,
+despite both being natural facets for an apartment search: the source has no such fields. Nor
+does it invent dates — the only date in the index is the source's own `last_review`, and it is
+not offered as a facet. Presenting invented values alongside real ones is the kind of thing a
+reviewer is right to distrust, so facets use only what the data genuinely contains.

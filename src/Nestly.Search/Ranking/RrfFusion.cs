@@ -8,13 +8,13 @@ namespace Nestly.Search.Ranking;
 /// <remarks>
 /// <para>
 /// The two legs cannot be added together. BM25 returns unbounded scores that move with the corpus
-/// and the query, kNN returns a cosine similarity in [0, 1], and no constant reconciles them.
+/// and the query, kNN returns a normalised cosine score in [0, 1], and no constant reconciles them.
 /// RRF throws the scores away and keeps only the positions, which is the one thing the two lists
 /// genuinely have in common.
 /// </para>
 /// <para>
 /// Elasticsearch has an <c>rrf</c> retriever that does this, and it requires an Enterprise
-/// licence. Fifteen lines here keep the demo running forever on Basic.
+/// licence. The fifty lines below keep the demo running forever on Basic.
 /// </para>
 /// </remarks>
 public static class RrfFusion

@@ -8,9 +8,10 @@ namespace Nestly.Seeder.Cleaning;
 /// Turns a published CSV row into the <see cref="Listing"/> the index stores.
 /// </summary>
 /// <remarks>
-/// This is the only place in the project that invents a value, and it invents exactly one:
-/// <see cref="Listing.MonthlyRent"/>. Everything else is parsed from the source or the row is
-/// dropped. See data/README.md.
+/// This is the only place in the project that invents a value. <see cref="Listing.MonthlyRent"/> is
+/// derived for every row; a missing minimum_nights falls back to 1, which affects two rows of the
+/// committed dataset. Everything else is parsed from the source or the row is dropped. See
+/// data/README.md.
 /// </remarks>
 internal static class ListingMapper
 {
