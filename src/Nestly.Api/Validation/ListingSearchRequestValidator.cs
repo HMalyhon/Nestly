@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Nestly.Domain;
+using Nestly.Search.Searching;
 
 namespace Nestly.Api.Validation;
 
@@ -41,6 +42,18 @@ public static class ListingSearchRequestValidator
         if (request.PageSize is < 1 or > MaxPageSize)
         {
             Fail(nameof(request.PageSize), $"PageSize must be between 1 and {MaxPageSize}.");
+        }
+
+        // A text search fuses two capped legs, so it can only page through what it fused, while a
+        // filters-only browse pages as deep as Elasticsearch will go. Unenforced, the deep half of
+        // that range answered with an empty page beside a total in the thousands.
+        if (!string.IsNullOrWhiteSpace(request.Query) &&
+            request.Page > 0 && request.PageSize > 0 &&
+            ((long)request.Page * request.PageSize) > SearchLimits.MaxFusedResults)
+        {
+            Fail(
+                nameof(request.Page),
+                $"A text search reaches only its first {SearchLimits.MaxFusedResults} results; lower Page or PageSize.");
         }
 
         ValidateSearch(request.Query, request.Filters, modelState);
@@ -88,6 +101,12 @@ public static class ListingSearchRequestValidator
         if (filters.MinRent is { } min && filters.MaxRent is { } max && min > max)
         {
             Fail(nameof(filters.MaxRent), "MaxRent must be greater than or equal to MinRent.");
+        }
+
+        // MinAccommodates needs no rule: it binds to a byte, which cannot carry a bad value.
+        if (filters.MinBathrooms is < 0)
+        {
+            Fail(nameof(filters.MinBathrooms), "MinBathrooms cannot be negative.");
         }
 
         if (filters.MinReviewScore is < 0 or > 5)

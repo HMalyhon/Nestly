@@ -238,6 +238,54 @@ public sealed class ListingSearchRequestValidatorTests
         Assert.Equal(3, errors.Count);
     }
 
+    [Theory]
+    [InlineData(100, 20, true)]
+    [InlineData(20, 100, true)]
+    [InlineData(101, 20, false)]
+    [InlineData(21, 100, false)]
+    public void Validate_TextSearchPagedDeep_AcceptsOnlyWhatFusionCanReach(int page, int pageSize, bool expected)
+    {
+        // A text search fuses two capped legs, so page 21 of 100 has nothing left to slice. It
+        // used to answer with an empty page beside a total in the thousands.
+
+        // Arrange -- 100 x 20 and 20 x 100 both land exactly on the 2,000 the legs retrieve.
+        var request = new ListingSearchRequest { Page = page, PageSize = pageSize, Query = "loft" };
+
+        // Act
+        var valid = Validate(request, out _);
+
+        // Assert
+        Assert.Equal(expected, valid);
+    }
+
+    [Fact]
+    public void Validate_TheSameDeepPageWithoutText_Accepts()
+    {
+        // Arrange -- a filters-only browse is one sorted search, so it pages as deep as the cap
+        // on Page and PageSize allows and the fusion limit does not apply to it.
+        var request = new ListingSearchRequest { Page = 100, PageSize = 100 };
+
+        // Act
+        var valid = Validate(request, out _);
+
+        // Assert
+        Assert.True(valid);
+    }
+
+    [Fact]
+    public void Validate_NegativeMinBathrooms_Rejects()
+    {
+        // Arrange -- the one filter that binds to a signed type and had no rule of its own.
+        var request = Request(new ListingFilters { MinBathrooms = -1 });
+
+        // Act
+        var valid = Validate(request, out var errors);
+
+        // Assert
+        Assert.False(valid);
+        Assert.Contains("MinBathrooms", errors);
+    }
+
     private static ListingSearchRequest Request(ListingFilters? filters = null) =>
         new() { Page = 1, PageSize = 20, Filters = filters ?? new ListingFilters() };
 

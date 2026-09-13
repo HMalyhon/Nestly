@@ -98,5 +98,31 @@ public sealed class PagingTests(ElasticsearchFixture fixture)
         Assert.Equal(10, response.Hits.Count);
     }
 
+    [Theory]
+    [InlineData("apartment")]
+    [InlineData("quiet place to write where a dog would be welcome")]
+    [InlineData("zqx")]
+    public async Task Search_TextQuery_NeverCountsFewerResultsThanItReturns(string query)
+    {
+        // The total came from the lexical leg while the hits came from the fused set, so a response
+        // could list documents its own count did not include -- a vector-only hit is by definition
+        // one the lexical leg never returned. The third query matches nothing lexically, which is
+        // the shape that made the two disagree.
+
+        // Arrange
+        var request = Request(page: 1) with { Query = query };
+
+        // Act
+        var response = await Search.SearchAsync(request, Token);
+
+        // Assert
+        Assert.True(
+            response.Total >= response.Hits.Count,
+            $"Total {response.Total} is below the {response.Hits.Count} hits returned.");
+    }
+
+    // The fusion limit itself is pinned down in ListingSearchRequestValidatorTests rather than
+    // here: it sits at 2,000 and this fixture seeds 1,000, so no request against it can reach the
+    // boundary -- a page past the fused window and a page past the corpus look the same.
     private static ListingSearchRequest Request(int page) => new() { Page = page, PageSize = PageSize };
 }

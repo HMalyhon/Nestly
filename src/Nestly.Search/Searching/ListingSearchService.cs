@@ -29,8 +29,9 @@ internal sealed partial class ListingSearchService : IListingSearchService
     // Page 100 of 20 needs 2,000 ranked ids to slice from. Past the fused window the vector leg
     // has nothing left to contribute, so those pages come out in lexical order -- which falls out
     // of the arithmetic rather than needing a branch: a document present in one list scores
-    // 1/(k+rank), and that ordering is the lexical ordering.
-    private const int MaxRetrieval = 2_000;
+    // 1/(k+rank), and that ordering is the lexical ordering. A request for a page past it is
+    // refused by the validator rather than answered here, so this is a ceiling and not a clamp.
+    private const int MaxRetrieval = SearchLimits.MaxFusedResults;
 
     private readonly ElasticsearchClient _client;
     private readonly IListingEmbedder _embedder;
@@ -137,6 +138,10 @@ internal sealed partial class ListingSearchService : IListingSearchService
                 .Indices(_indexName)
                 .From(from)
                 .Size(request.PageSize)
+
+                // Elasticsearch stops counting at 10,000 by default and reports the total as a
+                // lower bound, which this response presents as exact.
+                .TrackTotalHits(true)
                 .Query(ListingQueryBuilder.Build(request.Query, request.Filters))
                 .Sort(ListingQueryBuilder.Sort(request.Sort, request.Filters.Near))
 
@@ -172,6 +177,9 @@ internal sealed partial class ListingSearchService : IListingSearchService
                 .Query(ListingQueryBuilder.Build(request.Query, request.Filters))
                 .Size(depth)
 
+                // As in BrowseAsync: the count this leg reports is the one the response carries.
+                .TrackTotalHits(true)
+
                 // Ids and scores only. The documents for the one page that survives fusion are
                 // fetched afterwards, so nothing ships a hundred descriptions.
                 .Source(new SourceConfig(false))
@@ -205,8 +213,12 @@ internal sealed partial class ListingSearchService : IListingSearchService
             request.Query,
             cancellationToken).ConfigureAwait(false);
 
+        // The hits come from the fused set, so the lexical count alone can be smaller than the list
+        // it is describing: a vector-only hit is by definition one the lexical leg never returned.
+        var total = Math.Max(lexical.Total, fused.Count);
+
         return new SearchResult(
-            lexical.Total,
+            total,
             [
                 .. page
                     .Where(hit => documents.ContainsKey(hit.Id))
