@@ -18,9 +18,14 @@ internal sealed class OnnxListingEmbedder : IListingEmbedder, IDisposable
     private const string InputIds = "input_ids";
     private const string AttentionMask = "attention_mask";
     private const string TokenTypeIds = "token_type_ids";
+    private const string HiddenStates = "last_hidden_state";
+
+    /// <summary>[batch, token, dimension] -- one vector per token, which is what pooling needs.</summary>
+    private const int HiddenStatesRank = 3;
 
     private readonly InferenceSession _session;
     private readonly BertTokenizer _tokenizer;
+    private readonly string _output;
     private readonly int _maxTokens;
     private readonly bool _needsTokenTypeIds;
 
@@ -49,11 +54,11 @@ internal sealed class OnnxListingEmbedder : IListingEmbedder, IDisposable
         // Read from the graph rather than assumed: exports of this model disagree about whether
         // they take token_type_ids, and about whether the hidden states are called
         // last_hidden_state or output_0.
-        var output = _session.OutputMetadata.Keys.First();
+        _output = ResolveHiddenStates(_session.OutputMetadata);
 
         _needsTokenTypeIds = _session.InputMetadata.ContainsKey(TokenTypeIds);
 
-        Dimensions = _session.OutputMetadata[output].Dimensions[^1];
+        Dimensions = _session.OutputMetadata[_output].Dimensions[^1];
     }
 
     public int Dimensions { get; }
@@ -76,15 +81,22 @@ internal sealed class OnnxListingEmbedder : IListingEmbedder, IDisposable
         var mask = new DenseTensor<long>([texts.Count, width]);
         var tokenTypes = new DenseTensor<long>([texts.Count, width]);
 
+        // Written through the backing buffers: Tensor<T> exposes no indexer taking loose ints, so
+        // inputIds[row, column] binds to the params int[] overload and allocates an array per write.
+        var inputIdsBuffer = inputIds.Buffer.Span;
+        var maskBuffer = mask.Buffer.Span;
+
         for (var row = 0; row < encoded.Length; row++)
         {
+            var offset = row * width;
+
             for (var column = 0; column < encoded[row].Length; column++)
             {
-                inputIds[row, column] = encoded[row][column];
+                inputIdsBuffer[offset + column] = encoded[row][column];
 
                 // Padding is zeroed and masked out, so a short description is not diluted by the
                 // filler that squares off the batch.
-                mask[row, column] = 1;
+                maskBuffer[offset + column] = 1;
             }
         }
 
@@ -101,10 +113,46 @@ internal sealed class OnnxListingEmbedder : IListingEmbedder, IDisposable
 
         using var results = _session.Run(inputs);
 
-        return Pool(results[0].AsTensor<float>(), mask, texts.Count, width, Dimensions);
+        var hidden = results.First(value => value.Name == _output).AsTensor<float>() as DenseTensor<float>
+            ?? throw new InvalidOperationException($"The model's '{_output}' output is not a dense tensor.");
+
+        return Pool(hidden.Buffer.Span, maskBuffer, texts.Count, width, Dimensions);
     }
 
     public void Dispose() => _session.Dispose();
+
+    /// <summary>The graph output holding per-token hidden states.</summary>
+    // Named when the export provides it, otherwise the only output there is. Taking the first of
+    // several would silently pick a pooled rank-2 output on an export that emits one, and pooling
+    // would then read across rows rather than down a row.
+    private static string ResolveHiddenStates(IReadOnlyDictionary<string, NodeMetadata> outputs)
+    {
+        string name;
+
+        if (outputs.ContainsKey(HiddenStates))
+        {
+            name = HiddenStates;
+        }
+        else if (outputs.Count == 1)
+        {
+            name = outputs.Keys.First();
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"The model exposes no '{HiddenStates}' output and {outputs.Count} outputs to choose between.");
+        }
+
+        var rank = outputs[name].Dimensions.Length;
+
+        if (rank != HiddenStatesRank)
+        {
+            throw new InvalidOperationException(
+                $"The model's '{name}' output has rank {rank}; mean pooling needs per-token states of rank {HiddenStatesRank}.");
+        }
+
+        return name;
+    }
 
     /// <summary>
     /// Mean pooling over the unmasked tokens, then L2 normalisation.
@@ -112,7 +160,12 @@ internal sealed class OnnxListingEmbedder : IListingEmbedder, IDisposable
     // Both halves are required, not stylistic. The model emits one vector per token and
     // sentence-transformers defines the sentence vector as their mask-weighted mean; and the index
     // uses cosine similarity, which is a dot product only once the vectors are unit length.
-    private static float[][] Pool(Tensor<float> hidden, DenseTensor<long> mask, int rows, int width, int dimensions)
+    private static float[][] Pool(
+        ReadOnlySpan<float> hidden,
+        ReadOnlySpan<long> mask,
+        int rows,
+        int width,
+        int dimensions)
     {
         var pooled = new float[rows][];
 
@@ -123,16 +176,20 @@ internal sealed class OnnxListingEmbedder : IListingEmbedder, IDisposable
 
             for (var column = 0; column < width; column++)
             {
-                if (mask[row, column] == 0)
+                var token = (row * width) + column;
+
+                if (mask[token] == 0)
                 {
                     continue;
                 }
 
                 tokens++;
 
+                var states = hidden.Slice(token * dimensions, dimensions);
+
                 for (var dimension = 0; dimension < dimensions; dimension++)
                 {
-                    vector[dimension] += hidden[row, column, dimension];
+                    vector[dimension] += states[dimension];
                 }
             }
 
