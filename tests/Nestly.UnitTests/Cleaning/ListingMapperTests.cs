@@ -198,6 +198,62 @@ public sealed class ListingMapperTests
         Assert.Equal("Bright and airy", listing.Description);
     }
 
+    [Theory]
+    [InlineData("NaN", "-73.9")]
+    [InlineData("Infinity", "-73.9")]
+    [InlineData("40.7", "NaN")]
+    [InlineData("91", "-73.9")]
+    [InlineData("-91", "-73.9")]
+    [InlineData("40.7", "181")]
+    [InlineData("40.7", "-181")]
+    public void TryMap_CoordinatesOffTheGlobe_SkipsTheRow(string latitude, string longitude)
+    {
+        // NumberStyles.Float parses NaN and Infinity happily, and the geo_point that results
+        // failed to serialise mid-bulk and ended the whole seed.
+
+        // Arrange
+        var row = Row() with { Latitude = latitude, Longitude = longitude };
+
+        // Act
+        var mapped = ListingMapper.TryMap(row, out _, out var reason);
+
+        // Assert
+        Assert.False(mapped);
+        Assert.Equal(ListingSkipReason.Coordinates, reason);
+    }
+
+    [Theory]
+    [InlineData("$3000000000")]
+    [InlineData("$100000000")]
+    public void TryMap_PriceTooLargeToDeriveARentFrom_SkipsTheRow(string price)
+    {
+        // The first overflowed the cast to int, the second wrapped MonthlyRent negative.
+
+        // Arrange
+        var row = Row() with { Price = price };
+
+        // Act
+        var mapped = ListingMapper.TryMap(row, out _, out var reason);
+
+        // Assert
+        Assert.False(mapped);
+        Assert.Equal(ListingSkipReason.Price, reason);
+    }
+
+    [Fact]
+    public void TryMap_EveryPublishedPrice_DerivesARentThatStaysPositive()
+    {
+        // Arrange -- the ceiling the mapper accepts, which is where the multiply used to wrap.
+        var row = Row() with { Price = "$71582788" };
+
+        // Act
+        var mapped = ListingMapper.TryMap(row, out var listing, out _);
+
+        // Assert
+        Assert.True(mapped);
+        Assert.True(listing.MonthlyRent > 0, $"MonthlyRent wrapped to {listing.MonthlyRent}.");
+    }
+
     private static ListingCsvRow Row(string bedrooms = "1") => new()
     {
         Id = "12345",

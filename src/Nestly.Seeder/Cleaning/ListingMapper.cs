@@ -21,6 +21,9 @@ internal static class ListingMapper
     /// which is exactly what would make it a fudge.
     /// </summary>
     private const int NightsPerMonth = 30;
+    private const int MaxPricePerNight = int.MaxValue / NightsPerMonth;
+    private const double MaxLatitude = 90;
+    private const double MaxLongitude = 180;
 
     public static bool TryMap(ListingCsvRow row, out Listing listing, out ListingSkipReason reason)
     {
@@ -34,13 +37,16 @@ internal static class ListingMapper
             return false;
         }
 
-        if (!TryParseDouble(row.Latitude, out var latitude) || !TryParseDouble(row.Longitude, out var longitude))
+        if (!TryParseCoordinate(row.Latitude, MaxLatitude, out var latitude) ||
+            !TryParseCoordinate(row.Longitude, MaxLongitude, out var longitude))
         {
             reason = ListingSkipReason.Coordinates;
             return false;
         }
 
-        if (!TryParsePrice(row.Price, out var pricePerNight) || pricePerNight <= 0)
+        // The ceiling is what MonthlyRent can hold once multiplied out.
+        if (!TryParsePrice(row.Price, out var pricePerNight) ||
+            pricePerNight <= 0 || pricePerNight > MaxPricePerNight)
         {
             reason = ListingSkipReason.Price;
             return false;
@@ -119,7 +125,15 @@ internal static class ListingMapper
             return false;
         }
 
-        price = (int)Math.Round(value, MidpointRounding.AwayFromZero);
+        var rounded = Math.Round(value, MidpointRounding.AwayFromZero);
+
+        // The cast throws rather than returning false, which would escape this method's contract.
+        if (rounded is < int.MinValue or > int.MaxValue)
+        {
+            return false;
+        }
+
+        price = (int)rounded;
         return true;
     }
 
@@ -160,6 +174,11 @@ internal static class ListingMapper
 
     private static bool TryParseDouble(string? raw, out double value) =>
         double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+
+    // NumberStyles.Float accepts "NaN" and "Infinity", which reach Elasticsearch as a geo_point
+    // that fails to serialise and takes the whole bulk run with it.
+    private static bool TryParseCoordinate(string? raw, double limit, out double value) =>
+        TryParseDouble(raw, out value) && double.IsFinite(value) && Math.Abs(value) <= limit;
 
     /// <summary>Parses a whole-number count, rejecting anything the index could not hold.</summary>
     // Elasticsearch's byte is signed, so 127 is the ceiling -- not 255. Out-of-range values are

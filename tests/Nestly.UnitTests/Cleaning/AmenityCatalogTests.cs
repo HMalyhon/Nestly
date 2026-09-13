@@ -101,4 +101,17 @@ public sealed class AmenityCatalogTests
         // Assert -- an unparseable amenity list is not a reason to drop a real apartment.
         Assert.Empty(normalized);
     }
+
+    [Fact]
+    public void Normalize_NullInsideTheArray_SkipsItRatherThanThrowing()
+    {
+        // A JSON null deserialises to a null element, which used to reach string.Replace.
+
+        // Act
+        var amenities = AmenityCatalog.Normalize("[\"Wifi\", null, \"Free parking on premises\"]");
+
+        // Assert
+        Assert.Contains("Wifi", amenities);
+        Assert.Equal(2, amenities.Count);
+    }
 }

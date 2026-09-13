@@ -56,11 +56,11 @@ internal static class AmenityCatalog
             return [];
         }
 
-        string[]? amenities;
+        string?[]? amenities;
 
         try
         {
-            amenities = JsonSerializer.Deserialize<string[]>(amenitiesJson);
+            amenities = JsonSerializer.Deserialize<string?[]>(amenitiesJson);
         }
         catch (JsonException)
         {
@@ -76,6 +76,12 @@ internal static class AmenityCatalog
 
         foreach (var amenity in amenities)
         {
+            // A JSON null in the array deserialises to a null element, not a failure.
+            if (amenity is null)
+            {
+                continue;
+            }
+
             // The source is littered with non-breaking spaces ("Washer - In unit"), which
             // would otherwise defeat the substring match.
             var normalized = amenity.Replace('\u00A0', ' ').ToLowerInvariant();
