@@ -128,6 +128,77 @@ internal sealed partial class ListingSearchService : IListingSearchService
             DistanceKm = origin is { } from ? GeoDistance.Kilometers(from, listing.Location) : null,
         };
 
+    /// <summary>The one field a sort reads, or no source at all when ranking by relevance.</summary>
+    private static SourceConfig SortSource(ListingSort sort)
+    {
+        var field = sort switch
+        {
+            ListingSort.PriceAsc or ListingSort.PriceDesc => ListingFields.MonthlyRent,
+            ListingSort.ReviewScoreDesc => ListingFields.ReviewScore,
+            ListingSort.DistanceAsc => ListingFields.Location,
+            _ => null,
+        };
+
+        return field is null
+            ? new SourceConfig(false)
+            : new SourceConfig(new Elastic.Clients.Elasticsearch.Core.Search.SourceFilter
+            {
+                Includes = Fields.FromStrings([field]),
+            });
+    }
+
+    /// <summary>Orders the fused set by the requested field, leaving relevance order untouched.</summary>
+    // Elasticsearch sorts each leg separately, so it cannot order the union the legs produce;
+    // without this the sort was accepted and then silently ignored on every query with text in it.
+    // OrderBy is stable, so ties keep their fused order and a page stays the same page.
+    private static IReadOnlyList<FusedHit> Reorder(
+        IReadOnlyList<FusedHit> fused,
+        ListingSort sort,
+        GeoPoint? near,
+        IReadOnlyCollection<Hit<ListingSortDocument>> lexical,
+        IReadOnlyCollection<Hit<ListingSortDocument>> vector)
+    {
+        if (sort == ListingSort.Relevance)
+        {
+            return fused;
+        }
+
+        var values = new Dictionary<string, ListingSortDocument>(StringComparer.Ordinal);
+
+        foreach (var hit in lexical.Concat(vector))
+        {
+            if (hit.Id is { } id && hit.Source is { } document)
+            {
+                values[id] = document;
+            }
+        }
+
+        return sort switch
+        {
+            ListingSort.PriceAsc => [.. fused.OrderBy(hit => Rent(hit, values))],
+            ListingSort.PriceDesc => [.. fused.OrderByDescending(hit => Rent(hit, values))],
+
+            // Unreviewed listings sort last rather than first, as they do in ListingQueryBuilder.
+            ListingSort.ReviewScoreDesc => [.. fused.OrderByDescending(hit => Score(hit, values))],
+            ListingSort.DistanceAsc when near is { } origin =>
+                [.. fused.OrderBy(hit => Distance(hit, values, origin))],
+            _ => fused,
+        };
+
+        static int Rent(FusedHit hit, Dictionary<string, ListingSortDocument> values) =>
+            values.TryGetValue(hit.Id, out var document) ? document.MonthlyRent : int.MaxValue;
+
+        static double Score(FusedHit hit, Dictionary<string, ListingSortDocument> values) =>
+            values.TryGetValue(hit.Id, out var document) && document.ReviewScore is { } score
+                ? score
+                : double.NegativeInfinity;
+
+        static double Distance(FusedHit hit, Dictionary<string, ListingSortDocument> values, GeoPoint origin) =>
+            values.TryGetValue(hit.Id, out var document) && document.Location is { } location
+                ? GeoDistance.Kilometers(origin, location)
+                : double.PositiveInfinity;
+    }
+
     /// <summary>Filters-only browse: one search, sorted, paged by Elasticsearch.</summary>
     private async Task<SearchResult> BrowseAsync(ListingSearchRequest request, CancellationToken cancellationToken)
     {
@@ -171,7 +242,11 @@ internal sealed partial class ListingSearchService : IListingSearchService
         var depth = Math.Clamp(from + request.PageSize, FusionDepth, MaxRetrieval);
         var queryVector = _embedder.Embed(request.Query!);
 
-        var lexicalLeg = _client.SearchAsync<Listing>(
+        // Ids and scores only, plus the one field a non-relevance sort orders by. The documents
+        // for the page that survives fusion are fetched afterwards.
+        var source = SortSource(request.Sort);
+
+        var lexicalLeg = _client.SearchAsync<ListingSortDocument>(
             search => search
                 .Indices(_indexName)
                 .Query(ListingQueryBuilder.Build(request.Query, request.Filters))
@@ -179,22 +254,19 @@ internal sealed partial class ListingSearchService : IListingSearchService
 
                 // As in BrowseAsync: the count this leg reports is the one the response carries.
                 .TrackTotalHits(true)
-
-                // Ids and scores only. The documents for the one page that survives fusion are
-                // fetched afterwards, so nothing ships a hundred descriptions.
-                .Source(new SourceConfig(false))
+                .Source(source)
 
                 // Facets ride on this leg: they describe what the filters and text match, which
                 // is exactly what the lexical query already had to compute.
                 .Aggregations(ListingFacetAggregations.Build(request.Query, request.Filters)),
             cancellationToken);
 
-        var vectorLeg = _client.SearchAsync<Listing>(
+        var vectorLeg = _client.SearchAsync<ListingSortDocument>(
             search => search
                 .Indices(_indexName)
                 .Knn(ListingQueryBuilder.Knn(queryVector, request.Filters, FusionDepth, FusionDepth * 2))
                 .Size(FusionDepth)
-                .Source(new SourceConfig(false)),
+                .Source(source),
             cancellationToken);
 
         await Task.WhenAll(lexicalLeg, vectorLeg).ConfigureAwait(false);
@@ -206,7 +278,8 @@ internal sealed partial class ListingSearchService : IListingSearchService
         Ensure(vector, "vector search");
 
         var fused = RrfFusion.Fuse(Ranking(lexical.Hits), Ranking(vector.Hits));
-        var page = fused.Skip(from).Take(request.PageSize).ToArray();
+        var ordered = Reorder(fused, request.Sort, request.Filters.Near, lexical.Hits, vector.Hits);
+        var page = ordered.Skip(from).Take(request.PageSize).ToArray();
 
         var documents = await HydrateAsync(
             [.. page.Select(hit => hit.Id)],
