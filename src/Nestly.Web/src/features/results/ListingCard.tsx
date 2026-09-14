@@ -2,7 +2,7 @@ import BedOutlinedIcon from '@mui/icons-material/BedOutlined';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import ShowerOutlinedIcon from '@mui/icons-material/ShowerOutlined';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
-import { Box, Card, CardActionArea, CardContent, Chip, Stack, Typography } from '@mui/material';
+import { Box, ButtonBase, Card, CardContent, Chip, Stack, Typography } from '@mui/material';
 import { visuallyHidden } from '@mui/utils';
 import { formatBathrooms, formatBedrooms, formatMoney, truncate } from '../../format';
 import { HighlightedText } from './HighlightedText';
@@ -23,6 +23,10 @@ export function ListingCard({
   hit, isHighlighted, isSelected, onHover, onSelect,
 }: ListingCardProps): ReactElement {
   const { listing } = hit;
+  const titleId = `listing-${listing.id}-title`;
+  const placeId = `listing-${listing.id}-place`;
+  const priceId = `listing-${listing.id}-price`;
+  const actionId = `listing-${listing.id}-action`;
 
   return (
     <Card
@@ -31,6 +35,7 @@ export function ListingCard({
       onMouseEnter={() => { onHover(listing.id); }}
       onMouseLeave={() => { onHover(undefined); }}
       sx={{
+        position: 'relative',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -39,32 +44,41 @@ export function ListingCard({
         transition: 'box-shadow 120ms ease-out, border-color 120ms ease-out',
       }}
     >
-      {/* The card is the control: the only way to the map used to be hovering it, which no
-          keyboard can do, and the whole card is a bigger target than a "show on map" link. */}
-      <CardActionArea
-        onClick={() => { onSelect(listing.id); }}
-        onFocus={() => { onHover(listing.id); }}
-        onBlur={() => { onHover(undefined); }}
-        aria-pressed={isSelected}
-        aria-label={`Show ${listing.title} on the map`}
-        sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
-      >
-        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, flexGrow: 1, width: '100%' }}>
+      <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, flexGrow: 1, width: '100%' }}>
         <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
           <Box>
             <Typography variant="subtitle1" component="h2" sx={{ lineHeight: 1.3 }}>
-              {listing.title}
+              {/* The control sits inside the heading and is stretched over the card by ::after, so
+                  the whole card stays clickable without the content being swallowed by a button. */}
+              <ButtonBase
+                onClick={() => { onSelect(listing.id); }}
+                onFocus={() => { onHover(listing.id); }}
+                onBlur={() => { onHover(undefined); }}
+                aria-pressed={isSelected}
+                aria-labelledby={`${titleId} ${placeId} ${priceId} ${actionId}`}
+                sx={{
+                  textAlign: 'left',
+                  font: 'inherit',
+                  color: 'inherit',
+                  borderRadius: 1,
+                  '&::after': { content: '""', position: 'absolute', inset: 0, borderRadius: 'inherit' },
+                }}
+              >
+                <span id={titleId}>{listing.title}</span>
+              </ButtonBase>
             </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            <Typography id={placeId} variant="body2" sx={{ color: 'text.secondary' }}>
               {listing.neighborhood} · {listing.borough}
             </Typography>
+            <Box component="span" id={actionId} sx={visuallyHidden}>show on the map</Box>
           </Box>
 
           <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-            <Typography variant="subtitle1" component="p" sx={{ color: 'primary.main' }}>
+            <Typography id={priceId} variant="subtitle1" component="p" sx={{ color: 'primary.main' }}>
               {formatMoney(listing.monthlyRent)}
+              <Box component="span" sx={visuallyHidden}> per month</Box>
             </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            <Typography variant="caption" aria-hidden sx={{ color: 'text.secondary' }}>
               per month
             </Typography>
           </Box>
@@ -106,8 +120,7 @@ export function ListingCard({
         <Typography variant="caption" sx={{ color: 'text.secondary', mt: 'auto' }}>
           {listing.roomType} · {formatMoney(listing.pricePerNight)}/night
         </Typography>
-        </CardContent>
-      </CardActionArea>
+      </CardContent>
     </Card>
   );
 }

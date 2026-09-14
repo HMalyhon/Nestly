@@ -17,6 +17,10 @@ export function SortSelect({ value, onChange }: SortSelectProps): ReactElement {
       value={value}
       onChange={(event) => { onChange(event.target.value as ListingSort); }}
       sx={{ minWidth: 190, bgcolor: 'background.paper' }}
+
+      // Without this the closing menu restores focus to this select, undoing the move to the
+      // results heading that every other way of reordering the list performs.
+      slotProps={{ select: { MenuProps: { disableRestoreFocus: true } } }}
     >
       {SORT_OPTIONS.map((option) => (
         <MenuItem key={option.value} value={option.value}>
