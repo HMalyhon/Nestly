@@ -10,12 +10,18 @@ namespace Nestly.Api.Controllers;
 [Produces("application/json")]
 public sealed class ListingsMapController(IListingMapService map) : ControllerBase
 {
+    private const int MaxRequestBytes = 64 * 1024;
+
     /// <summary>Map markers for the same search: pins while they fit, density cells when they do not.</summary>
     // Its own controller because the map answers a different question from the result list, and
     // shares only the filters.
     [HttpPost("map", Name = "MapListings")]
     [ProducesResponseType<MapResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+
+    // The filter caps are checked after binding, so without this a 30 MB array is deserialised
+    // and then rejected.
+    [RequestSizeLimit(MaxRequestBytes)]
     public async Task<ActionResult<MapResponse>> Map(
         [FromBody] ListingMapRequest request,
         CancellationToken cancellationToken)

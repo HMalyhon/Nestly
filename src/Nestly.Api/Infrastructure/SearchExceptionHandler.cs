@@ -10,12 +10,24 @@ namespace Nestly.Api.Infrastructure;
 // from a cluster that is down -- and /health already distinguishes the two.
 internal sealed class SearchExceptionHandler(IProblemDetailsService problemDetails) : IExceptionHandler
 {
+    /// <summary>nginx's 499. Not in StatusCodes, and never reaches the client that caused it.</summary>
+    private const int ClientClosedRequest = 499;
+
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
         Exception exception,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
+
+        // A keystroke supersedes the request before it: nothing failed, and there is nobody left
+        // to send a body to.
+        if (httpContext.RequestAborted.IsCancellationRequested && exception is OperationCanceledException)
+        {
+            httpContext.Response.StatusCode = ClientClosedRequest;
+
+            return true;
+        }
 
         if (exception is not SearchException search)
         {

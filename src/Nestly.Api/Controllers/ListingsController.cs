@@ -10,12 +10,18 @@ namespace Nestly.Api.Controllers;
 [Produces("application/json")]
 public sealed class ListingsController(IListingSearchService search) : ControllerBase
 {
+    private const int MaxRequestBytes = 64 * 1024;
+
     /// <summary>Search listings by free text and filters.</summary>
     // POST, though it reads: the request nests filter objects and arrays that a query string
     // handles badly. Shareable search URLs are the front end's job.
     [HttpPost("search", Name = "SearchListings")]
     [ProducesResponseType<ListingSearchResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+
+    // The filter caps are checked after binding, so without this a 30 MB array is deserialised
+    // and then rejected.
+    [RequestSizeLimit(MaxRequestBytes)]
     public async Task<ActionResult<ListingSearchResponse>> Search(
         [FromBody] ListingSearchRequest request,
         CancellationToken cancellationToken)
