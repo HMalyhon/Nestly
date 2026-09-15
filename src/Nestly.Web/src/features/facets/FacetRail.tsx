@@ -1,4 +1,4 @@
-import { Box, Button, Divider, Stack, Typography } from '@mui/material';
+import { Box, Button, Chip, Divider, Stack, Typography } from '@mui/material';
 import { LIST_FILTERS, countFilters } from '../search/searchState';
 import { BedroomsFacet } from './BedroomsFacet';
 import { CheckboxFacet } from './CheckboxFacet';
@@ -91,6 +91,23 @@ export function FacetRail({ facets, filters, onChange }: FacetRailProps): ReactE
           </Button>
         )}
       </Stack>
+
+      {/* The viewport narrows the results like any filter but is not one of them, so it is not in
+          the count and "Clear" keeps it. Shown here because it is otherwise invisible -- below the
+          map breakpoint there is no map on screen to explain why results are missing. */}
+      {filters.within && (
+        <Chip
+          label="Map area"
+          variant="outlined"
+          onDelete={() => {
+            const next = { ...filters };
+
+            delete next.within;
+            onChange(next);
+          }}
+          sx={{ alignSelf: 'flex-start' }}
+        />
+      )}
 
       {facets && high > low && (
         <>

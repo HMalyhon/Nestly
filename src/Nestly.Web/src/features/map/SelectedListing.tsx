@@ -1,6 +1,6 @@
 import CloseIcon from '@mui/icons-material/Close';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
-import { Box, Chip, IconButton, Paper, Skeleton, Stack, Typography } from '@mui/material';
+import { Alert, Box, Chip, IconButton, Paper, Skeleton, Stack, Typography } from '@mui/material';
 import { visuallyHidden } from '@mui/utils';
 import { formatBathrooms, formatBedrooms, formatMoney, truncate } from '../../format';
 import type { Listing } from '../../api/types';
@@ -12,6 +12,7 @@ const AMENITY_COUNT = 5;
 interface SelectedListingProps {
   listing: Listing | undefined;
   isPending: boolean;
+  error: string | undefined;
   onClose: () => void;
 }
 
@@ -21,8 +22,12 @@ interface SelectedListingProps {
 // A Leaflet popup would sit above the marker, where a card this tall is cut off by the top of the
 // pane -- and the option that fixes that, autoPan, moves the map, which this app reads as the user
 // panning and answers by refiltering the results out from under the click.
-export function SelectedListing({ listing, isPending, onClose }: SelectedListingProps): ReactElement | null {
-  if (!listing && !isPending) {
+export function SelectedListing({
+  listing, isPending, error, onClose,
+}: SelectedListingProps): ReactElement | null {
+  // Without the error case this returned null on a failed fetch, so clicking an off-page pin
+  // selected it and then showed nothing at all.
+  if (!listing && !isPending && error === undefined) {
     return null;
   }
 
@@ -55,7 +60,9 @@ export function SelectedListing({ listing, isPending, onClose }: SelectedListing
         <CloseIcon fontSize="small" />
       </IconButton>
 
-      {!listing ? (
+      {error !== undefined && !listing ? (
+        <Alert severity="error" sx={{ mr: 3 }}>{error}</Alert>
+      ) : !listing ? (
         <Stack sx={{ gap: 0.5, pr: 4 }}>
           <Skeleton variant="text" width="60%" height={26} />
           <Skeleton variant="text" width="35%" />

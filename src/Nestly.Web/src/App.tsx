@@ -98,7 +98,7 @@ export function App(): ReactElement {
   const map = useListingMap(toMapRequest({ ...state, query: settled }), mapVisible);
 
   const write = (next: Partial<typeof state>, mode: 'push' | 'replace'): void => {
-    writeParams(writeSearchState({ ...state, ...next }), mode);
+    writeParams(writeSearchState({ ...state, ...next }, params), mode);
   };
 
   const jumpToTop = (): void => {
@@ -161,12 +161,15 @@ export function App(): ReactElement {
         selected={detail.data}
         selectedId={selectedId}
         isLoadingSelected={detail.isPending && selectedId !== undefined}
+        selectedError={detail.isError ? detail.error.message : undefined}
         onSelect={select}
       />
     </Suspense>
   );
 
-  const status = describeResults(isPending, isError, data, page, pages);
+  // isPlaceholderData means the previous page is still on screen, so announcing the new page
+  // number here would describe results nobody is looking at yet.
+  const status = describeResults(isPending || isPlaceholderData, isError, data, page, pages);
 
   return (
     <>

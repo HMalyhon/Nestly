@@ -127,12 +127,15 @@ interface MapPaneProps {
   /** True while the detail for an off-page pin is still in flight. */
   isLoadingSelected: boolean;
 
+  /** Why the selected listing could not be fetched, when it could not. */
+  selectedError: string | undefined;
+
   onSelect: (id: string | undefined) => void;
 }
 
 export function MapPane({
   data, initialBounds, onViewChange, error, highlightedId, selected, selectedId,
-  isLoadingSelected, onSelect,
+  isLoadingSelected, selectedError, onSelect,
 }: MapPaneProps): ReactElement {
   const theme = useTheme();
 
@@ -174,6 +177,7 @@ export function MapPane({
       <SelectedListing
         listing={selected}
         isPending={isLoadingSelected}
+        error={selectedError}
         onClose={() => { onSelect(undefined); }}
       />
 

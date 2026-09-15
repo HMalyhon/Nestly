@@ -95,6 +95,11 @@ function readBounds(value: string | null): GeoBounds | undefined {
     return undefined;
   }
 
+  // A box with no area matches nothing, and ?bbox=,,, parses into exactly that at (0, 0).
+  if (north === south || west === east) {
+    return undefined;
+  }
+
   return { topLat: north, leftLon: west, bottomLat: south, rightLon: east };
 }
 
@@ -209,9 +214,19 @@ export function readSearchState(params: URLSearchParams): SearchState {
   };
 }
 
+/** Every parameter this module owns, so a write can clear them without touching the rest. */
+const OWNED_PARAMS = ['q', 'sort', 'page', 'beds', 'minRent', 'maxRent', 'bbox', 'z',
+  ...Object.keys(LIST_FILTERS)] as const;
+
 /** Only non-default values are written, so a plain search stays a clean link. */
-export function writeSearchState(state: SearchState): URLSearchParams {
-  const params = new URLSearchParams();
+// Seeded from the current URL rather than empty: campaign and referral parameters are nobody
+// else's to delete, and building fresh dropped them on the first keystroke.
+export function writeSearchState(state: SearchState, current?: URLSearchParams): URLSearchParams {
+  const params = new URLSearchParams(current);
+
+  for (const param of OWNED_PARAMS) {
+    params.delete(param);
+  }
 
   if (state.query) {
     params.set('q', state.query);
