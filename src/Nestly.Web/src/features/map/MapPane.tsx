@@ -1,5 +1,5 @@
 import { Alert, Box, useTheme } from '@mui/material';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { CircleMarker, MapContainer, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import { DomEvent } from 'leaflet';
 import { formatCount, formatMoney, truncate } from '../../format';
@@ -139,6 +139,34 @@ export function MapPane({
 }: MapPaneProps): ReactElement {
   const theme = useTheme();
 
+  // Keyed on the pins themselves, so moving the cursor down the result list reuses these elements
+  // instead of reconciling several hundred markers.
+  const pinLayer = useMemo(() => data?.pins.map((pin) => (
+    <CircleMarker
+      key={pin.id}
+      center={[pin.lat, pin.lon]}
+      radius={PIN_RADIUS}
+      // Stopped, or the click carries on to the map and clears what it just selected.
+      eventHandlers={{ click: (event) => { DomEvent.stopPropagation(event); onSelect(pin.id); } }}
+      pathOptions={{
+        color: theme.palette.common.white,
+        fillColor: theme.palette.primary.main,
+        fillOpacity: 1,
+        weight: 2,
+      }}
+    >
+      {/* Suppressed on the selected pin: its permanent label is already at this spot, and the
+          two stack into the same price printed twice. */}
+      {pin.id !== selectedId && (
+        <Tooltip direction="top" offset={[0, -6]}>{formatMoney(pin.monthlyRent)}</Tooltip>
+      )}
+    </CircleMarker>
+  )), [data?.pins, selectedId, onSelect, theme]);
+
+  const highlighted = highlightedId === undefined || highlightedId === selectedId
+    ? undefined
+    : data?.pins.find((pin) => pin.id === highlightedId);
+
   // Read once, on mount: MapContainer treats these as initial state, and the map owns its view
   // from then on.
   const bounds: LatLngBoundsExpression | undefined = initialBounds && [
@@ -217,27 +245,23 @@ export function MapPane({
           </CircleMarker>
         ))}
 
-        {data?.pins.map((pin) => (
+        {pinLayer}
+
+        {/* Drawn over the pin rather than restyling it: react-leaflet compares pathOptions by
+            reference, so a highlight built into the list called setStyle on every marker. */}
+        {highlighted && (
           <CircleMarker
-            key={pin.id}
-            center={[pin.lat, pin.lon]}
-            radius={pin.id === highlightedId ? PIN_RADIUS * 1.9 : PIN_RADIUS}
-            // Stopped, or the click carries on to the map and clears what it just selected.
-            eventHandlers={{ click: (event) => { DomEvent.stopPropagation(event); onSelect(pin.id); } }}
+            center={[highlighted.lat, highlighted.lon]}
+            radius={PIN_RADIUS * 1.9}
+            eventHandlers={{ click: (event) => { DomEvent.stopPropagation(event); onSelect(highlighted.id); } }}
             pathOptions={{
               color: theme.palette.common.white,
-              fillColor: pin.id === highlightedId ? theme.palette.secondary.main : theme.palette.primary.main,
+              fillColor: theme.palette.secondary.main,
               fillOpacity: 1,
               weight: 2,
             }}
-          >
-            {/* Suppressed on the selected pin: its permanent label is already at this spot, and
-                the two stack into the same price printed twice. */}
-            {pin.id !== selectedId && (
-              <Tooltip direction="top" offset={[0, -6]}>{formatMoney(pin.monthlyRent)}</Tooltip>
-            )}
-          </CircleMarker>
-        ))}
+          />
+        )}
 
         {/* Last, so it draws over the pin already at that spot. The only permanent label on the
             map: one is what makes a listing findable among hundreds of identical dots, which

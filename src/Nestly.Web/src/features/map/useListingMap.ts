@@ -11,6 +11,10 @@ export function useListingMap(request: ListingMapRequest, enabled: boolean): Use
     // Markers stay put while the next viewport loads, so panning does not blink the map empty.
     placeholderData: keepPreviousData,
     staleTime: 30_000,
+
+    // The viewport is part of the key, so every pan mints an entry that the default five minutes
+    // would hold on to for the rest of the session.
+    gcTime: 60_000,
     enabled,
   });
 }

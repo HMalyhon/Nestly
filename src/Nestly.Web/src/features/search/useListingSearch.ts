@@ -15,5 +15,9 @@ export function useListingSearch(request: ListingSearchRequest): UseQueryResult<
     // blanks the results, which is what "instant search" usually fails on.
     placeholderData: keepPreviousData,
     staleTime: 30_000,
+
+    // The viewport is part of the key, so every pan mints an entry that the default five minutes
+    // would hold on to for the rest of the session.
+    gcTime: 60_000,
   });
 }

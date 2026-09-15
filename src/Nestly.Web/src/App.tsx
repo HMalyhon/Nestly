@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { visuallyHidden } from '@mui/utils';
 import { useQueryClient } from '@tanstack/react-query';
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { FacetRail } from './features/facets/FacetRail';
 import { useListingMap } from './features/map/useListingMap';
 import { ResultsList } from './features/results/ResultsList';
@@ -128,9 +128,10 @@ export function App(): ReactElement {
 
   // Toggling, so clicking the same card or pin again clears it. Nothing else ever could: the
   // selection had no off switch at all.
-  const select = (id: string | undefined): void => {
+  // Stable, because the map memoises its marker layer on this.
+  const select = useCallback((id: string | undefined): void => {
     setSelectedId((current) => (current === id ? undefined : id));
-  };
+  }, []);
 
   // The search returns each listing in full, so the detail cache is filled from it rather than
   // refetched: clicking a card costs nothing, and only a pin whose listing is off the current page
