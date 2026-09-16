@@ -1,4 +1,6 @@
-import type { GeoBounds, ListingFilters, ListingMapRequest, ListingSearchRequest, ListingSort } from '../../api/types';
+import type {
+  GeoBounds, ListingFilters, ListingMapRequest, ListingSearchRequest, ListingSort, Suggestion,
+} from '../../api/types';
 
 export const PAGE_SIZE = 20;
 
@@ -267,6 +269,24 @@ export function writeSearchState(state: SearchState, current?: URLSearchParams):
   }
 
   return params;
+}
+
+/** The search a suggestion leads to. A neighbourhood filters on its exact, case-sensitive name. */
+export function pickSuggestion(state: SearchState, suggestion: Suggestion): SearchState {
+  if (suggestion.kind === 'Listing') {
+    return { ...state, query: suggestion.text, page: 1 };
+  }
+
+  const chosen = state.filters.neighborhoods ?? [];
+
+  return {
+    ...state,
+    query: '',
+    page: 1,
+    filters: chosen.includes(suggestion.text)
+      ? state.filters
+      : { ...state.filters, neighborhoods: [...chosen, suggestion.text] },
+  };
 }
 
 /** How many filter values are active, for the "clear" control and the mobile badge. */

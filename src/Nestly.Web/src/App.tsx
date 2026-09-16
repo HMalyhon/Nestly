@@ -13,13 +13,13 @@ import { useListing } from './features/results/useListing';
 import { SearchBar } from './features/search/SearchBar';
 import { SortSelect } from './features/search/SortSelect';
 import {
-  countFilters, pageCount, readSearchState, toMapRequest, toRequest, writeSearchState,
+  countFilters, pageCount, pickSuggestion, readSearchState, toMapRequest, toRequest, writeSearchState,
 } from './features/search/searchState';
 import { useListingSearch } from './features/search/useListingSearch';
 import { formatCount, formatListings } from './format';
 import { useDebounced } from './hooks/useDebounced';
 import { useUrlState } from './hooks/useUrlState';
-import type { GeoBounds, ListingFilters, ListingSearchResponse, ListingSort } from './api/types';
+import type { GeoBounds, ListingFilters, ListingSearchResponse, ListingSort, Suggestion } from './api/types';
 import type { ViewCause } from './features/map/MapPane';
 import type { ReactElement } from 'react';
 
@@ -116,6 +116,8 @@ export function App(): ReactElement {
   // Narrowing the results invalidates the page you were on, so every filter change returns to 1.
   const filter = (next: ListingFilters): void => { write({ filters: next, page: 1 }, 'push'); };
 
+  const pick = (suggestion: Suggestion): void => { write(pickSuggestion(state, suggestion), 'push'); };
+
   // Replace, not push: a pan is a continuous gesture, and a history entry per frame of it would
   // make the back button useless.
   const look = (within: GeoBounds, nextZoom: number, cause: ViewCause): void => {
@@ -211,7 +213,11 @@ export function App(): ReactElement {
               Nestly
             </Typography>
             <Box sx={{ flexGrow: 1, minWidth: 240 }}>
-              <SearchBar value={query} onChange={(next) => { write({ query: next, page: 1 }, 'replace'); }} />
+              <SearchBar
+                value={query}
+                onChange={(next) => { write({ query: next, page: 1 }, 'replace'); }}
+                onPick={pick}
+              />
             </Box>
             {!wideEnoughForRail && (
               <Button

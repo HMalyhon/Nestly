@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SEARCH, DEFAULT_VIEW, MAX_PAGE, MAX_QUERY_LENGTH, MAX_ZOOM, MIN_ZOOM, PAGE_SIZE,
-  countFilters, pageCount, readSearchState, writeBounds, writeSearchState,
+  countFilters, pageCount, pickSuggestion, readSearchState, writeBounds, writeSearchState,
 } from './searchState';
 import type { SearchState } from './searchState';
 
@@ -266,6 +266,47 @@ describe('writeSearchState', () => {
 
     // Assert
     expect(roundTripped).toEqual(state);
+  });
+});
+
+describe('pickSuggestion', () => {
+  it('filters on a neighbourhood by its exact name and drops the prefix that found it', () => {
+    // Arrange
+    const state: SearchState = { ...DEFAULT_SEARCH, query: 'bed', page: 4 };
+
+    // Act
+    const next = pickSuggestion(state, { kind: 'Neighborhood', text: 'Bedford-Stuyvesant' });
+
+    // Assert
+    expect(next.filters.neighborhoods).toEqual(['Bedford-Stuyvesant']);
+    expect(next.query).toBe('');
+    expect(next.page).toBe(1);
+  });
+
+  it('adds a neighbourhood to those already chosen, once', () => {
+    // Arrange
+    const state: SearchState = { ...DEFAULT_SEARCH, filters: { neighborhoods: ['Harlem', 'SoHo'] } };
+
+    // Act
+    const added = pickSuggestion(state, { kind: 'Neighborhood', text: 'Chelsea' });
+    const repeated = pickSuggestion(state, { kind: 'Neighborhood', text: 'SoHo' });
+
+    // Assert
+    expect(added.filters.neighborhoods).toEqual(['Harlem', 'SoHo', 'Chelsea']);
+    expect(repeated.filters.neighborhoods).toEqual(['Harlem', 'SoHo']);
+  });
+
+  it('searches for a listing title and leaves the filters alone', () => {
+    // Arrange
+    const state: SearchState = { ...DEFAULT_SEARCH, query: 'lof', page: 3, filters: { boroughs: ['Brooklyn'] } };
+
+    // Act
+    const next = pickSuggestion(state, { kind: 'Listing', text: 'Loft Suite' });
+
+    // Assert
+    expect(next.query).toBe('Loft Suite');
+    expect(next.page).toBe(1);
+    expect(next.filters).toEqual({ boroughs: ['Brooklyn'] });
   });
 });
 

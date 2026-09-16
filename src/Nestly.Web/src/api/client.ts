@@ -1,4 +1,6 @@
-import type { Listing, ListingMapRequest, ListingSearchRequest, ListingSearchResponse, MapResponse } from './types';
+import type {
+  Listing, ListingMapRequest, ListingSearchRequest, ListingSearchResponse, MapResponse, Suggestion,
+} from './types';
 
 // Relative by default, so the app calls its own origin: Vite proxies /api in dev, nginx does it
 // in Compose. Set VITE_API_BASE_URL only to point a local UI at an API somewhere else.
@@ -119,4 +121,9 @@ export function getListing(id: string, signal: AbortSignal): Promise<Listing> {
 // amenities for everything on screen.
 export function mapListings(body: ListingMapRequest, signal: AbortSignal): Promise<MapResponse> {
   return request('/api/listings/map', signal, body);
+}
+
+// A GET, unlike search and map: it fires per keystroke, so it should be cacheable.
+export function suggestListings(query: string, signal: AbortSignal): Promise<Suggestion[]> {
+  return request(`/api/listings/suggest?q=${encodeURIComponent(query)}`, signal);
 }

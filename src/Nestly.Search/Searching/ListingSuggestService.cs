@@ -42,6 +42,9 @@ internal sealed class ListingSuggestService : IListingSuggestService
                 .Indices(_indexName)
                 .Size(TitleCount)
                 .Query(TitlePrefix(query))
+
+                // One row per title: without it "loft" filled three of five rows with "Loft Suite".
+                .Collapse(new FieldCollapse { Field = ListingFields.TitleKeyword })
                 .SourceIncludes(ListingFields.Title)
                 .Suggest(Neighborhoods(query)),
             cancellationToken).ConfigureAwait(false);

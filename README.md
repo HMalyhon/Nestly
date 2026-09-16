@@ -84,7 +84,8 @@ parallel against the same filters**, and fuses them:
 
 Typeahead is a separate, cheaper endpoint: `/api/listings/suggest` reads a `search_as_you_type`
 sub-field on the title and a `completion` suggester on the neighbourhood, so the dropdown never
-pays for the hybrid pipeline.
+pays for the hybrid pipeline. Picking a neighbourhood applies it as a filter rather than searching
+for its name; picking a listing searches for its title.
 
 The two lists cannot simply be added together: BM25 returns unbounded scores that shift with the
 corpus and the query, while kNN returns a normalised cosine score in `[0, 1]`. So they are merged
