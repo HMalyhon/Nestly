@@ -81,6 +81,9 @@ jobs:
       - name: Lint, typecheck and build
         run: npm run build
 
+      - name: Unit tests
+        run: npm test
+
   images:
     name: Container images
     runs-on: ubuntu-latest
