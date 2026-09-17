@@ -39,6 +39,8 @@ builder.Services.AddCors(cors => cors.AddPolicy(
         policy.WithOrigins([.. origins]).AllowAnyHeader().AllowAnyMethod();
     }));
 
+builder.Services.AddApiRateLimiter();
+
 builder.Services.AddHealthChecks()
     .AddCheck<ElasticsearchHealthCheck>("elasticsearch", timeout: TimeSpan.FromSeconds(2));
 
@@ -49,6 +51,9 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+// Before the rate limiter, which partitions on the caller's address.
+app.UseForwardedHeaders();
+
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
@@ -56,6 +61,8 @@ app.MapOpenApi();
 app.MapScalarApiReference();
 
 app.UseCors(CorsOptions.PolicyName);
+
+app.UseRateLimiter();
 
 app.MapControllers();
 app.MapHealthChecks("/health");
