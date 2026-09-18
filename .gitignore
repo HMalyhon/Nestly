@@ -496,3 +496,6 @@ data/raw/
 
 # Test results
 [Tt]est[Rr]esults/
+
+# Coverage reports, produced by the recipe in the README.
+coverage/

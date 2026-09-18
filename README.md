@@ -25,7 +25,7 @@ Then open **http://localhost:8080**.
 
 That is the whole setup, but the first run is not quick: it builds two images and downloads the
 90 MB embedding model before it starts. Seeding then embeds and indexes 5,000 listings, which
-takes **57 seconds** — and it costs that on every `docker compose up`, because the seeder drops
+takes **51 seconds** — and it costs that on every `docker compose up`, because the seeder drops
 the index and rebuilds it rather than resuming. The page comes up before the index does, since
 the API is healthy as soon as Elasticsearch answers, so give the seed a minute before searching
 or watch `docker compose logs -f seeder`.
@@ -147,12 +147,12 @@ Server-side `elapsedMs` against the seeded 5,000-document index, 30 warm samples
 
 | Request | p50 | p90 |
 |---|---|---|
-| Filters only, no text | 5 ms | 8 ms |
-| `"brooklyn"` | 36 ms | 54 ms |
-| `"brooklyn loft"` | 46 ms | 66 ms |
-| `"brooklyn loft"` + a borough filter | 51 ms | 66 ms |
+| Filters only, no text | 4 ms | 7 ms |
+| `"brooklyn"` | 39 ms | 58 ms |
+| `"brooklyn loft"` | 42 ms | 50 ms |
+| `"brooklyn loft"` + a borough filter | 51 ms | 64 ms |
 
-Filters are nearly free; free text costs seven to ten times as much, and the cause is the facet
+Filters are nearly free; free text costs ten times as much, and the cause is the facet
 design above — seven `global → filter` aggregations each re-run the text query to count their own
 dimension. That is the price of counts that stay honest when a filter is applied, and at this
 scale it is worth paying. The lever, if it ever needs pulling, is the front end: facets only have to be
@@ -195,6 +195,7 @@ the `curl` command to fetch it when it is missing.
 ## Layout
 
 ```
+.config/       The dotnet tool manifest, for the coverage merge
 .github/       The CI workflow
 data/          Trimmed Inside Airbnb subset + provenance
 docker/        Dockerfiles and the nginx config
@@ -209,6 +210,7 @@ src/
 tests/
   Nestly.UnitTests/         Pure logic, no I/O
   Nestly.IntegrationTests/  Testcontainers + a real Elasticsearch
+                            (the front end's own tests sit beside their source)
 tools/         DataTrimmer, ModelFetcher
 ```
 
@@ -225,28 +227,44 @@ cd src/Nestly.Web && npm ci && npm run dev       # http://localhost:5173, proxie
 ## Tests
 
 ```sh
-dotnet run --project tools/Nestly.ModelFetcher        # or five vector tests skip themselves
+dotnet run --project tools/Nestly.ModelFetcher        # or eight vector tests skip themselves
 dotnet test --project tests/Nestly.UnitTests
 dotnet test --project tests/Nestly.IntegrationTests   # needs a Docker daemon
+npm --prefix src/Nestly.Web test
 ```
 
-**131 unit tests** cover the parts worth pinning down in isolation — RRF fusion, the emitted
-query DSL, HTML cleaning, amenity mapping, geo maths, request validation. **28 integration
-tests** run against a real Elasticsearch 9.2.0 started by Testcontainers and seeded with 1,000
-listings from the committed dataset, because facet counts, pagination and hybrid ranking are claims
-about Elasticsearch's behaviour and a mock would only assert what the mock was told. Five of the
-28 assert on the vector leg and skip themselves when the embedding model is absent, so fetch it
-first or you will quietly run 23.
+**163 unit tests** cover the parts worth pinning down in isolation — RRF fusion, the emitted
+query DSL, HTML cleaning, amenity mapping, geo maths, request validation, and which paths the rate
+limiter meters. **47 integration tests** run against a real Elasticsearch 9.2.0 started by
+Testcontainers and seeded with 1,000 listings from the committed dataset, because facet counts,
+pagination, sorting and hybrid ranking are claims about Elasticsearch's behaviour and a mock would
+only assert what the mock was told. Eight of the 47 assert on the vector leg and skip themselves
+when the embedding model is absent, so fetch it first or you will quietly run 39. A further
+**48 front-end tests** cover `searchState`, which is where every search in the URL is parsed and
+written back.
 
-Line coverage across both suites is **63.4%**, excluding generated OpenAPI scaffolding — a figure
-meant to be read rather than celebrated, since the classes worth covering are the ones the unit
-tests target: `RrfFusion`, `GeoDistance` and `HtmlText` at 100%, `AmenityCatalog` 97.6%,
-`ListingQueryBuilder` 95.6%, `ListingMapper` 94.1%. Wiring, options classes and controllers pull
-the total down. Reproduce it by adding `-- --coverage --coverage-output-format cobertura` to each
-`dotnet test` above and merging the two reports.
+Line coverage across the two .NET suites is **64.2%**, or 59.0% counting the OpenAPI and regex
+source generators that neither suite has any reason to enter. Read it rather than celebrate it:
+the pure logic the unit tests target — fusion, geo maths, HTML cleaning, amenity mapping, the
+query builder, the mapper — sits near the top of that range, while `Program`, the options classes
+and `SeedRunner` pull the total down. The report names every class if you want the breakdown:
 
-CI runs both suites, the front-end lint/typecheck/build and a full image build — on every push to
-`main` and every pull request against it. Pushes to other branches run nothing.
+```sh
+rm -rf coverage
+dotnet test --project tests/Nestly.UnitTests \
+  -- --coverage --coverage-output-format cobertura --results-directory coverage/unit
+dotnet test --project tests/Nestly.IntegrationTests \
+  -- --coverage --coverage-output-format cobertura --results-directory coverage/integration
+dotnet tool restore
+dotnet tool run reportgenerator -reports:'coverage/**/*.cobertura.xml' \
+  -targetdir:coverage/report -reporttypes:TextSummary -classfilters:'-*.Generated'
+```
+
+The reports go to a directory of their own because each run leaves a file behind, and a glob over
+`TestResults` would merge this run with every earlier one.
+
+CI runs both .NET suites, the front-end lint, typecheck, build and tests, and a full image build —
+on every push to `main` and every pull request against it. Pushes to other branches run nothing.
 
 ## Deliberately deferred
 

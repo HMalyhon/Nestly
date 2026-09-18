@@ -5,7 +5,7 @@ namespace Nestly.Domain;
 /// the map never re-transfers descriptions, amenities and vectors for every visible listing.
 /// </summary>
 /// <remarks>
-/// Below <see cref="PinLimit"/> matching listings the response carries individual
+/// At <see cref="PinLimit"/> matching listings or fewer the response carries individual
 /// <see cref="Pins"/>; above it, Elasticsearch aggregates server-side into
 /// <see cref="Clusters"/> and the UI draws density bubbles instead. Shipping tens of thousands
 /// of markers to Leaflet is what makes these maps feel broken.
