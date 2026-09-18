@@ -58,5 +58,9 @@ EXPOSE 8080
 # appsettings.json whether or not they pin a content root themselves.
 WORKDIR /app/api
 
+# The image defines this account and then runs as root anyway unless told otherwise. Nothing here
+# writes outside /tmp, and the model, dataset and assemblies are only ever read.
+USER $APP_UID
+
 # The seeder service overrides this; see docker-compose.yml.
 ENTRYPOINT ["dotnet", "Nestly.Api.dll"]

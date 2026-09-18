@@ -40,6 +40,10 @@ tiles from OpenStreetMap.
 | API | http://localhost:5080 — API reference at `/scalar`, OpenAPI document at `/openapi/v1.json`, health at `/health` |
 | Elasticsearch | http://localhost:9200 |
 
+All three are published to `127.0.0.1` rather than every interface. The cluster runs with security
+disabled, so a 9200 reachable from a shared network is unauthenticated cluster admin; the other two
+follow it for consistency. Every container runs as a non-root user.
+
 ## Architecture
 
 ```mermaid

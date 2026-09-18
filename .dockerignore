@@ -8,6 +8,14 @@
 # Fetched during the image build and verified against its digest there.
 models/
 
+# The 15 MB upstream snapshot the trimmer reads; the committed subset is what ships.
+data/raw/
+
+# A developer's local overrides. Vite inlines every VITE_ value it finds into the bundle, so a
+# stray .env.local would be baked into the image and served to everyone.
+**/.env.local
+**/.env.*.local
+
 .git/
 .github/
 .vs/

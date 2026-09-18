@@ -13,7 +13,9 @@ COPY src/Nestly.Web/ ./
 # would fail CI, which is the point of leaving the gate inside the script rather than beside it.
 RUN npm run build
 
-FROM nginx:1.29-alpine AS runtime
+# The unprivileged variant: stock nginx runs its master as root, and this one already listens on
+# 8080, which is the port this config binds anyway.
+FROM nginxinc/nginx-unprivileged:1.29-alpine AS runtime
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/dist /usr/share/nginx/html

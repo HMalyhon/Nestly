@@ -29,7 +29,9 @@ services:
         soft: -1
         hard: -1
     ports:
-      - "9200:9200"
+      # Loopback, not every interface. Security is off inside this cluster, so a published 9200 on
+      # a cafe or office network hands anyone who can reach the host unauthenticated cluster admin.
+      - "127.0.0.1:9200:9200"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
@@ -44,6 +46,13 @@ services:
       timeout: 10s
       retries: 12
       start_period: 30s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+    # A gigabyte of heap plus the JVM around it. Unbounded, a runaway query takes the host down
+    # rather than the container.
+    mem_limit: 2g
 
   api:
     image: nestly-api
@@ -63,13 +72,21 @@ services:
     ports:
       # 8080 inside, which is what the aspnet images already default to; 5080 outside, so the web
       # tier can have 8080 on the host without the two contending for it.
-      - "5080:8080"
+      - "127.0.0.1:5080:8080"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 20s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    # The 90 MB model, its session arenas and the batch it embeds.
+    mem_limit: 1g
 
   seeder:
     image: nestly-api
@@ -91,6 +108,11 @@ services:
     # Runs once and stops. Without this Compose would treat the exit as a crash and start it
     # again, re-indexing the whole dataset every time.
     restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
 
   web:
     image: nestly-web
@@ -102,7 +124,13 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
 
 volumes:
   elasticsearch-data:
