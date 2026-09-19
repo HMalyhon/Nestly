@@ -15,7 +15,7 @@ export default defineConfig(({ command }) => {
   const build = {
     rolldownOptions: {
       output: {
-        advancedChunks: {
+        codeSplitting: {
           groups: [
             { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
             { name: 'mui', test: /node_modules[\\/](@mui|@emotion)[\\/]/ },
