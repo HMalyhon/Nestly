@@ -1,0 +1,57 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /src/Nestly.Web
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      web:
+        update-types: [minor, patch]
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      dotnet:
+        update-types: [minor, patch]
+    ignore:
+      # These majors follow net10.0 and the Elasticsearch 9 server, which move by hand.
+      - dependency-name: Microsoft.AspNetCore.*
+        update-types: [version-update:semver-major]
+      - dependency-name: Microsoft.Extensions.*
+        update-types: [version-update:semver-major]
+      - dependency-name: Elastic.Clients.Elasticsearch
+        update-types: [version-update:semver-major]
+
+  # docker-compose.yml is left out: its Elasticsearch tag has to move with the test fixture's.
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      images:
+        update-types: [minor, patch]
+    ignore:
+      # Node follows CI's node-version, and the .NET images follow global.json.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+      - dependency-name: dotnet/*
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        update-types: [minor, patch]

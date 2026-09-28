@@ -196,7 +196,7 @@ the `curl` command to fetch it when it is missing.
 
 ```
 .config/       The dotnet tool manifest, for the coverage merge
-.github/       The CI workflow
+.github/       The CI workflow and the Dependabot schedule
 data/          Trimmed Inside Airbnb subset + provenance
 docker/        Dockerfiles and the nginx config
 docs/          The demo gif
@@ -265,6 +265,7 @@ The reports go to a directory of their own because each run leaves a file behind
 
 CI runs both .NET suites, the front-end lint, typecheck, build and tests, and a full image build —
 on every push to `main` and every pull request against it. Pushes to other branches run nothing.
+Dependabot opens its pull requests once a month, so every update goes through the same gate.
 
 ## Deliberately deferred
 
