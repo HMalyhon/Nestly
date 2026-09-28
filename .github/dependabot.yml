@@ -10,6 +10,13 @@ updates:
     groups:
       web:
         update-types: [minor, patch]
+    ignore:
+      # Held to the range @vitejs/plugin-react peers; the two move together by hand.
+      - dependency-name: oxc-transform-react
+        update-types: [version-update:semver-minor, version-update:semver-major]
+      # typescript-eslint peers typescript <6.1, so 7 cannot install yet.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: nuget
     directory: /
