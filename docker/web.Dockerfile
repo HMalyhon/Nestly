@@ -15,7 +15,7 @@ RUN npm run build
 
 # The unprivileged variant: stock nginx runs its master as root, and this one already listens on
 # 8080, which is the port this config binds anyway.
-FROM nginxinc/nginx-unprivileged:1.29-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/dist /usr/share/nginx/html
